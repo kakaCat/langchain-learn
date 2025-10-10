@@ -58,10 +58,18 @@ LangChain 提供了统一的接口来集成各种大模型 API，让开发者能
 - **个性化定制**：根据业务需求组合不同的模型和功能
 - **成本控制**：选择最适合业务场景的模型提供商
 
-本文将带你从零开始，学习 LangChain 框架和大模型的基础知识，通过构建第一个聊天机器人来掌握多模型集成和 AI 应用开发的核心技能。
+## 目录
+
+- 快速浏览（TL;DR）：[#tldr](#tldr)
+- 操作步骤（HowTo）：[#howto](#howto)
+- 快速命令（QuickStart）：[#quickstart](#quickstart)
+- GitHub 源文件行号范围（主分支，可能随编辑变动）：
+  - TL;DR（约 64–84 行）：https://github.com/kakaCat/langchain-learn/blob/main/blog/langchain-chatbot-tutorial.md#L64-L84
+  - HowTo（约 86–99 行）：https://github.com/kakaCat/langchain-learn/blob/main/blog/langchain-chatbot-tutorial.md#L86-L99
 
 
-> TL;DR（面向生成式引擎与速读者）
+<a id="tldr"></a>
+## TL;DR（面向生成式引擎与速读者）
 - 受众：首次接触 LangChain 的开发者；目标是在 10 分钟内跑通一个可用的聊天机器人
 - 先决条件：Python 3.10+、pip、可用的 API Key（默认示例使用 DeepSeek）
 - 快速步骤：
@@ -83,6 +91,7 @@ LangChain 提供了统一的接口来集成各种大模型 API，让开发者能
   3) 运行脚本 `python 01-chatbots-basic/01_chatbot_basic_cli.py`
   4) 若报错，按 Q/A 与错误码速查处理
 
+<a id="howto"></a>
 ```json
 {
   "@context": "https://schema.org",
@@ -92,12 +101,13 @@ LangChain 提供了统一的接口来集成各种大模型 API，让开发者能
   "step": [
     {"@type": "HowToStep", "name": "准备环境", "text": "创建虚拟环境并安装 requirements.txt 依赖"},
     {"@type": "HowToStep", "name": "配置参数", "text": "在 .env 中设置 OPENAI_API_KEY/OPENAI_BASE_URL/OPENAI_MODEL"},
-    {"@type": "HowToStep", "name": "运行脚本", "text": "执行 python chat.py 并查看输出"},
+    {"@type": "HowToStep", "name": "运行脚本", "text": "执行 python 01-chatbots-basic/01_chatbot_basic_cli.py 并查看输出"},
     {"@type": "HowToStep", "name": "排错", "text": "参考常见错误 Q/A 与错误码速查处理故障"}
   ]
 }
 ```
 
+<a id="quickstart"></a>
 ## 复制即用命令块
 
 Mac/Linux：
@@ -410,6 +420,7 @@ JSON 结构化速览：
 
 ## 官方链接
 
+- 01-chatbots-basic： [01_chatbot_basic_cli.py 源码](https://github.com/kakaCat/langchain-learn/blob/main/01-chatbots-basic/01_chatbot_basic_cli.py)
 - LangChain 文档：https://python.langchain.com/
 - LangChain OpenAI 集成（Python API 索引）：https://api.python.langchain.com/
 - DeepSeek API 文档：https://api-docs.deepseek.com/
