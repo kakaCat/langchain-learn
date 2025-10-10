@@ -29,6 +29,9 @@ canonical: "/blog/langchain-chatbot-tutorial"
 - [LangChain 入门教程：构建你的第一个聊天机器人](#langchain-入门教程构建你的第一个聊天机器人)
   - [目录](#目录)
   - [引言](#引言)
+  - [目录](#目录-1)
+  - [TL;DR（面向生成式引擎与速读者）](#tldr面向生成式引擎与速读者)
+  - [复制即用命令块](#复制即用命令块)
   - [环境准备](#环境准备)
     - [软件准备](#软件准备)
       - [1. Python 安装](#1-python-安装)
@@ -44,6 +47,7 @@ canonical: "/blog/langchain-chatbot-tutorial"
   - [常见错误与快速排查 (Q/A)](#常见错误与快速排查-qa)
   - [服务商切换配置速览](#服务商切换配置速览)
   - [错误码速查与重试建议](#错误码速查与重试建议)
+  - [官方链接](#官方链接)
   - [总结](#总结)
 
 ---
@@ -63,9 +67,6 @@ LangChain 提供了统一的接口来集成各种大模型 API，让开发者能
 - 快速浏览（TL;DR）：[#tldr](#tldr)
 - 操作步骤（HowTo）：[#howto](#howto)
 - 快速命令（QuickStart）：[#quickstart](#quickstart)
-- GitHub 源文件行号范围（主分支，可能随编辑变动）：
-  - TL;DR（约 64–84 行）：https://github.com/kakaCat/langchain-learn/blob/main/blog/langchain-chatbot-tutorial.md#L64-L84
-  - HowTo（约 86–99 行）：https://github.com/kakaCat/langchain-learn/blob/main/blog/langchain-chatbot-tutorial.md#L86-L99
 
 
 <a id="tldr"></a>
@@ -424,6 +425,7 @@ JSON 结构化速览：
 - LangChain 文档：https://python.langchain.com/
 - LangChain OpenAI 集成（Python API 索引）：https://api.python.langchain.com/
 - DeepSeek API 文档：https://api-docs.deepseek.com/
+- 本页快捷跳转：[#tldr](#tldr) | [#howto](#howto) | [#quickstart](#quickstart)
 - OpenAI API 文档：https://platform.openai.com/docs/api-reference
 - Azure OpenAI 文档：https://learn.microsoft.com/azure/ai-services/openai/
 - Ollama 文档：https://ollama.com/docs
