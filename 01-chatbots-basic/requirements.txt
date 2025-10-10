@@ -1,0 +1,15 @@
+# LangChain 基础依赖（Module 1 - Chatbots Basic）
+
+# 核心
+langchain>=0.2
+langchain-core>=0.2
+
+# OpenAI 提供商（使用 OpenAI API 时需要）
+langchain-openai>=0.1
+
+# 本地模型（使用 Ollama 时需要）
+langchain-ollama>=0.1
+
+# 常用辅助
+tiktoken>=0.7
+python-dotenv>=1.0

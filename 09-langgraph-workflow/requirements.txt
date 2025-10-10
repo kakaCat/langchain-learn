@@ -1,0 +1,17 @@
+# LangGraph 工作流所需依赖
+
+# 核心
+langgraph>=0.2
+langchain>=0.2
+langchain-core>=0.2
+
+# OpenAI 提供商（使用 OpenAI API 时需要）
+langchain-openai>=0.1
+
+# 本地模型（使用 Ollama 时需要）
+langchain-ollama>=0.1
+
+langchain_community>=0.2
+# 常用辅助
+tiktoken>=0.7
+python-dotenv>=1.0

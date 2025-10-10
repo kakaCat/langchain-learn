@@ -1,0 +1,24 @@
+# LangChain 学习项目依赖（统一）
+
+# 核心
+langchain>=0.2
+langchain-core>=0.2
+
+# OpenAI 兼容提供商
+langchain-openai>=0.1
+
+# 本地模型
+langchain-ollama>=0.1
+
+# 社区集成（注意：pip 包名为 langchain-community）
+langchain-community>=0.2
+
+# 常用辅助
+python-dotenv>=1.0.0
+requests>=2.28.0
+numpy>=1.21.0
+Pillow>=9.0.0
+opencv-python>=4.5.0
+speechrecognition>=3.8.0
+pydub>=0.25.0
+tiktoken>=0.7

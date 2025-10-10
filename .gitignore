@@ -1,0 +1,72 @@
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+**/.venv/
+
+# Build & packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+*.manifest
+*.spec
+
+# Testing & coverage
+.coverage
+.coverage.*
+.cache/
+.pytest_cache/
+.mypy_cache/
+.tox/
+.nox/
+htmlcov/
+
+# Editors/IDE
+.vscode/
+.idea/
+**/.idea/
+*.iml
+
+# Environment files & secrets
+.env
+*.env
+.env.*
+.envrc
+*.pem
+*.key
+*.crt
+*.cer
+
+# Logs & databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Node (if any)
+node_modules/
+
+# Mac extra
+.AppleDouble
+.Spotlight-V100
+.Trashes
+
+# Module env files
+**/.env
+**/.env.*
