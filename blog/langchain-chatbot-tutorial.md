@@ -29,9 +29,10 @@ canonical: "/blog/langchain-chatbot-tutorial"
 - [LangChain 入门教程：构建你的第一个聊天机器人](#langchain-入门教程构建你的第一个聊天机器人)
   - [目录](#目录)
   - [引言](#引言)
-  - [目录](#目录-1)
-  - [TL;DR（面向生成式引擎与速读者）](#tldr面向生成式引擎与速读者)
-  - [复制即用命令块](#复制即用命令块)
+  - [本页快捷跳转](#本页快捷跳转)
+  - [TL;DR（面向生成式引擎与速读者）](#tldr)
+  - [HowTo（操作步骤）](#howto)
+  - [复制即用命令块](#quickstart)
   - [环境准备](#环境准备)
     - [软件准备](#软件准备)
       - [1. Python 安装](#1-python-安装)
@@ -115,7 +116,7 @@ Mac/Linux：
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-printf "OPENAI_API_KEY=your_api_key_here\nOPENAI_BASE_URL=https://api.deepseek.com\nOPENAI_MODEL=deepseek-chat\nOPENAI_TEMPERATURE=0.2\nOPENAI_MAX_TOKENS=512\n" > .env
+printf "OPENAI_API_KEY=your_api_key_here\nOPENAI_BASE_URL=https://api.deepseek.com\nOPENAI_MODEL=deepseek-chat\nOPENAI_TEMPERATURE=0.2\nOPENAI_MAX_TOKENS=512\n" > 01-chatbots-basic/.env
 pip install -r requirements.txt
 python 01-chatbots-basic/01_chatbot_basic_cli.py
 ```
@@ -124,7 +125,7 @@ Windows（PowerShell）：
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-Set-Content -Path .env -Value @\"
+Set-Content -Path 01-chatbots-basic/.env -Value @\"
 OPENAI_API_KEY=your_api_key_here
 OPENAI_BASE_URL=https://api.deepseek.com
 OPENAI_MODEL=deepseek-chat
