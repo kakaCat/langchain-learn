@@ -24,35 +24,13 @@ canonical: "/blog/langchain-chatbot-tutorial"
 
 # LangChain 入门教程：构建你的第一个聊天机器人
 
-## 目录
+## 本页快捷跳转
 
-- [LangChain 入门教程：构建你的第一个聊天机器人](#langchain-入门教程构建你的第一个聊天机器人)
-  - [目录](#目录)
-  - [引言](#引言)
-  - [本页快捷跳转](#本页快捷跳转)
-  - [TL;DR（面向生成式引擎与速读者）](#tldr)
-  - [HowTo（操作步骤）](#howto)
-  - [复制即用命令块](#quickstart)
-  - [环境准备](#环境准备)
-    - [软件准备](#软件准备)
-      - [1. Python 安装](#1-python-安装)
-    - [项目准备](#项目准备)
-  - [基础聊天机器人实现](#基础聊天机器人实现)
-    - [1. 环境变量配置](#1-环境变量配置)
-    - [2. 代码实现](#2-代码实现)
-  - [基本概念](#基本概念)
-    - [1、提示词（Prompt）](#1提示词prompt)
-    - [2、模型（Model）](#2模型model)
-    - [3、回答（Response）](#3回答response)
-    - [4、参数（Parameters）](#4参数parameters)
-  - [常见错误与快速排查 (Q/A)](#常见错误与快速排查-qa)
-  - [服务商切换配置速览](#服务商切换配置速览)
-  - [错误码速查与重试建议](#错误码速查与重试建议)
-  - [官方链接](#官方链接)
-  - [总结](#总结)
+- 直达： [引言](#intro) | [环境准备](#setup) | [基础聊天机器人实现](#basic-impl) | [基本概念](#concepts) | [常见错误与快速排查 (Q/A)](#qa) | [服务商切换配置速览](#providers) | [错误码速查与重试建议](#errors) | [官方链接](#links) | [总结](#summary)
 
 ---
 
+<a id="intro"></a>
 ## 引言
 
 在人工智能快速发展的今天，虽然市面上已有 DeepSeek、OpenAI、豆包等多种 AI 应用客户端，但企业和开发者往往需要定制专属的 AI 解决方案。所有主流大模型都提供了对外 API，而 LangChain 作为一个强大的 LLM 应用开发框架，正是实现这种定制化的理想工具。
@@ -63,79 +41,8 @@ LangChain 提供了统一的接口来集成各种大模型 API，让开发者能
 - **个性化定制**：根据业务需求组合不同的模型和功能
 - **成本控制**：选择最适合业务场景的模型提供商
 
-## 本页快捷跳转
 
-- 快速浏览（TL;DR）：[#tldr](#tldr)
-- 操作步骤（HowTo）：[#howto](#howto)
-- 快速命令（QuickStart）：[#quickstart](#quickstart)
-
-
-<a id="tldr"></a>
-## TL;DR（面向生成式引擎与速读者）
-- 受众：首次接触 LangChain 的开发者；目标是在 10 分钟内跑通一个可用的聊天机器人
-- 先决条件：Python 3.10+、pip、可用的 API Key（默认示例使用 DeepSeek）
-- 快速步骤：
-  1) 创建并激活虚拟环境
-  2) 安装 requirements.txt 中依赖
-  3) 在 `.env` 写入 OPENAI_API_KEY/OPENAI_BASE_URL/OPENAI_MODEL
-  4) 运行示例脚本并得到回答
-- 默认映射：示例使用 `langchain-openai`，但通过 `OPENAI_BASE_URL=https://api.deepseek.com` + `OPENAI_MODEL=deepseek-chat` 完成 DeepSeek 的适配
-- 预期输出：标准中文回答文本；若失败，按“常见错误 Q/A”和“错误码速查”进行排查
-
-任务卡（Task Card）
-- 名称：LangChain 聊天机器人最小可运行示例
-- 目标：在本地以最少配置跑通一个可与模型对话的 CLI 程序
-- 输入：`.env`（API Key、Base URL、Model、Temperature、Max Tokens）
-- 输出：终端打印模型回答或清晰错误信息
-- 步骤：
-  1) 环境准备（Python/虚拟环境/依赖）
-  2) 写入 `.env` 参数
-  3) 运行脚本 `python 01-chatbots-basic/01_chatbot_basic_cli.py`
-  4) 若报错，按 Q/A 与错误码速查处理
-
-<a id="howto"></a>
-```json
-{
-  "@context": "https://schema.org",
-  "@type": "HowTo",
-  "name": "在本地运行一个 LangChain 聊天机器人",
-  "description": "使用 langchain-openai 适配 DeepSeek，通过 .env 管理配置并运行最小示例。",
-  "step": [
-    {"@type": "HowToStep", "name": "准备环境", "text": "创建虚拟环境并安装 requirements.txt 依赖"},
-    {"@type": "HowToStep", "name": "配置参数", "text": "在 .env 中设置 OPENAI_API_KEY/OPENAI_BASE_URL/OPENAI_MODEL"},
-    {"@type": "HowToStep", "name": "运行脚本", "text": "执行 python 01-chatbots-basic/01_chatbot_basic_cli.py 并查看输出"},
-    {"@type": "HowToStep", "name": "排错", "text": "参考常见错误 Q/A 与错误码速查处理故障"}
-  ]
-}
-```
-
-<a id="quickstart"></a>
-## 复制即用命令块
-
-Mac/Linux：
-```bash
-python -m venv .venv
-source .venv/bin/activate
-printf "OPENAI_API_KEY=your_api_key_here\nOPENAI_BASE_URL=https://api.deepseek.com\nOPENAI_MODEL=deepseek-chat\nOPENAI_TEMPERATURE=0.2\nOPENAI_MAX_TOKENS=512\n" > 01-chatbots-basic/.env
-pip install -r requirements.txt
-python 01-chatbots-basic/01_chatbot_basic_cli.py
-```
-
-Windows（PowerShell）：
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-Set-Content -Path 01-chatbots-basic/.env -Value @\"
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://api.deepseek.com
-OPENAI_MODEL=deepseek-chat
-OPENAI_TEMPERATURE=0.2
-OPENAI_MAX_TOKENS=512
-\"@
-pip install -r requirements.txt
-python 01-chatbots-basic/01_chatbot_basic_cli.py
-```
-
+<a id="setup"></a>
 ## 环境准备
 
 ### 软件准备
@@ -155,64 +62,53 @@ Anaconda 是一个集成的 Python 数据科学平台，包含常用的数据科
    ```
 ### 项目准备
 
-1. **创建虚拟环境**：
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Linux/Mac
-   # 或 .venv\Scripts\activate  # Windows
-   ```
-
-2. **安装依赖**：
-    创建 requirements.txt 文件内容如下
-    ```
-    # 核心
-    langchain>=0.2
-    langchain-core>=0.2
-
-    # OpenAI 提供商（使用 OpenAI API 时需要）
-    langchain-openai>=0.1
-
-    # 本地模型（使用 Ollama 时需要）
-    langchain-ollama>=0.1
-
-    # 常用辅助
-    tiktoken>=0.7
-    python-dotenv>=1.0
-    ```
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## 基础聊天机器人实现
-
-### 1. 环境变量配置
-
-创建 `.env` 文件来管理敏感信息和配置：
-
-**完整的环境变量配置示例**：
+- 创建虚拟环境与安装依赖：
 ```bash
-# 模型配置（备选）
-# 模型key
+# 在仓库根目录执行
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cd 01-chatbots-basic
+# 创建 .env（参考下方“环境变量配置”的最简示例）
+python 01_chatbot_basic_cli.py
+```
+- 最小 .env 示例：
+```env
 OPENAI_API_KEY=your_deepseek_api_key_here
-# 模型地址
 OPENAI_BASE_URL=https://api.deepseek.com
-# 模型名称
 OPENAI_MODEL=deepseek-chat
-# 模型温度
-OPENAI_TEMPERATURE=0.7
-# 模型最大token数   
-OPENAI_MAX_TOKENS=8192
+# 可选参数（新手预设）
+OPENAI_TEMPERATURE=0.2
+OPENAI_MAX_TOKENS=512
+```
+- 模块化依赖：
+```bash
+pip install -r 01-chatbots-basic/requirements.txt
+```
+- requirements.txt：
+```text
+# 核心
+langchain>=0.2
+langchain-core>=0.2
+
+# OpenAI 提供商（使用 OpenAI API 时需要）
+langchain-openai>=0.1
+
+# 本地模型（使用 Ollama 时需要）
+langchain-ollama>=0.1
+
+# 常用辅助
+tiktoken>=0.7
+python-dotenv>=1.0
 ```
 
-
-### 2. 代码实现
+<a id="basic-impl"></a>
+## 基础聊天机器人实现
 
 ```python
 #!/usr/bin/env python3
 """
 LangChain 聊天机器人教程
-
 """
 
 from __future__ import annotations
@@ -261,14 +157,6 @@ def get_llm() -> ChatOpenAI:
     temperature = float(os.getenv("OPENAI_TEMPERATURE", "0"))  # 默认低随机性
     max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "512"))    # 默认中等长度
 
-    # 前置校验：快速失败 + 清晰错误信息
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY 未设置，请在 .env 中配置有效密钥")
-    if not base_url:
-        raise ValueError("OPENAI_BASE_URL 未设置，DeepSeek 示例需配置为 https://api.deepseek.com")
-    if not model:
-        raise ValueError("OPENAI_MODEL 未设置，请指定可用模型（示例：deepseek-chat）")
-    
     # 步骤2：构建完整的模型配置字典
     kwargs = {
         "model": model,              # 模型名称
@@ -334,7 +222,9 @@ if __name__ == "__main__":
     # 执行主程序逻辑
     main()
 ```
+我们已经完成了聊天机器人，它可以根据用户输入的问题，调用语言模型生成回答。接下去，我们将介绍一些基本概念，帮助你更好地理解聊天机器人的工作原理。
 
+<a id="concepts"></a>
 ## 基本概念
 
 ### 1、提示词（Prompt）
@@ -373,6 +263,7 @@ question = "AI是什么？"
 | 代码/严谨写作 | 0.3-0.5 | 1024-2048 | 0.4 / 1024 |
 | 创意写作/长文 | 0.7-0.9 | 4096-8192 | 0.8 / 4096 |
 
+<a id="qa"></a>
 ## 常见错误与快速排查 (Q/A)
 
 - Q: 为什么提示 API Key 无效或 401？
@@ -387,7 +278,10 @@ question = "AI是什么？"
   - A: 同步更新 `OPENAI_BASE_URL`、`OPENAI_MODEL` 与鉴权方式；按“服务商切换配置速览”逐项检查。
 - Q: 如何开启详细日志定位问题？
   - A: 将示例代码中的 `verbose` 设为 `True`，或使用更细粒度的异常日志打印。
+- Q: 提示某些初始化参数不被支持？
+  - A: 请升级 `langchain` 与集成库版本，或移除不支持的参数（如 `timeout`/`request_timeout`/`verbose`），保留核心参数 `model`/`api_key`/`base_url`/`temperature`/`max_tokens`。
 
+<a id="providers"></a>
 ## 服务商切换配置速览
 
 为便于在不同模型提供商之间切换，建议通过统一的环境变量进行配置映射：
@@ -411,6 +305,18 @@ JSON 结构化速览：
 }
 ```
 
+本地 Ollama 最小替代示例（替换 ChatOpenAI）：
+```python
+from langchain_ollama import ChatOllama
+
+# 启动本地 Ollama 服务后使用（默认 http://localhost:11434）
+llm = ChatOllama(model="llama3:8b", temperature=0.2)
+response = llm.invoke("AI是什么？")
+print(response.content)
+```
+提示：使用 ChatOllama 时不需要 OPENAI_* 环境变量；请确保已安装 `langchain-ollama` 并本地已运行 Ollama 服务。
+
+<a id="errors"></a>
 ## 错误码速查与重试建议
 
 - 401 未授权：检查 `OPENAI_API_KEY` 是否有效、无多余空格；重新生成或刷新密钥；避免在代码或日志中泄露密钥。
@@ -420,17 +326,19 @@ JSON 结构化速览：
 - 429 速率限制：降低并发或请求频率，引入指数退避重试（`max_retries` + 退避间隔）。
 - 500/503 服务端错误：服务端暂时不可用；重试并做好容灾（降级为轻量模型或缓存回答）。
 
+<a id="links"></a>
 ## 官方链接
 
 - 01-chatbots-basic： [01_chatbot_basic_cli.py 源码](https://github.com/kakaCat/langchain-learn/blob/main/01-chatbots-basic/01_chatbot_basic_cli.py)
 - LangChain 文档：https://python.langchain.com/
 - LangChain OpenAI 集成（Python API 索引）：https://api.python.langchain.com/
 - DeepSeek API 文档：https://api-docs.deepseek.com/
-- 本页快捷跳转：[#tldr](#tldr) | [#howto](#howto) | [#quickstart](#quickstart)
+- 本页快捷跳转： [基础聊天机器人实现](#basic-impl) | [环境准备](#setup) | [常见错误与快速排查 (Q/A)](#qa)
 - OpenAI API 文档：https://platform.openai.com/docs/api-reference
 - Azure OpenAI 文档：https://learn.microsoft.com/azure/ai-services/openai/
 - Ollama 文档：https://ollama.com/docs
 
+<a id="summary"></a>
 ## 总结
 
 🎉 **恭喜你完成了 LangChain 入门之旅！**

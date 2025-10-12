@@ -1,7 +1,7 @@
 """
 08 - 模板国际化与本地化 Demo (Internationalization)
 
-演示多语言模板支持、区域化格式处理和动态语言切换。
+演示广告文案生成的多语言模板支持、区域化格式处理和动态语言切换。
 """
 
 from langchain.prompts import PromptTemplate
@@ -25,35 +25,35 @@ def get_llm():
     )
 
 class InternationalizationManager:
-    """国际化模板管理器"""
+    """国际化模板管理器：广告文案生成"""
     
     def __init__(self):
         self.language_templates = {
             "zh-CN": {
-                "greeting": "你好，{name}！欢迎使用我们的服务。",
-                "product_description": "这款{product}具有以下特点：{features}。",
-                "order_confirmation": "您的订单 #{order_id} 已确认，总金额为 {amount}。",
+                "ad_copy": "请为{product}创作{style}风格的广告文案。",
+                "product_intro": "这款{product}具有以下特点：{features}，适合{style}风格的广告宣传。",
+                "campaign_slogan": "{product} - 让生活更{style}！",
                 "date_format": "%Y年%m月%d日",
                 "currency_symbol": "¥"
             },
             "en-US": {
-                "greeting": "Hello, {name}! Welcome to our service.",
-                "product_description": "This {product} has the following features: {features}.",
-                "order_confirmation": "Your order #{order_id} has been confirmed. Total amount: {amount}.",
+                "ad_copy": "Please create a {style}-style advertisement copy for {product}.",
+                "product_intro": "This {product} has the following features: {features}, suitable for {style}-style advertising.",
+                "campaign_slogan": "{product} - Make life more {style}!",
                 "date_format": "%B %d, %Y",
                 "currency_symbol": "$"
             },
             "ja-JP": {
-                "greeting": "こんにちは、{name}さん！当社のサービスへようこそ。",
-                "product_description": "この{product}には以下の特徴があります：{features}。",
-                "order_confirmation": "注文 #{order_id} が確認されました。合計金額: {amount}。",
+                "ad_copy": "{product}のための{style}スタイルの広告コピーを作成してください。",
+                "product_intro": "この{product}には以下の特徴があります：{features}、{style}スタイルの広告に適しています。",
+                "campaign_slogan": "{product} - 生活をより{style}に！",
                 "date_format": "%Y年%m月%d日",
                 "currency_symbol": "¥"
             },
             "fr-FR": {
-                "greeting": "Bonjour, {name} ! Bienvenue dans notre service.",
-                "product_description": "Ce {product} a les caractéristiques suivantes : {features}.",
-                "order_confirmation": "Votre commande #{order_id} a été confirmée. Montant total : {amount}.",
+                "ad_copy": "Veuillez créer un texte publicitaire de style {style} pour {product}.",
+                "product_intro": "Ce {product} a les caractéristiques suivantes : {features}, adapté à la publicité de style {style}.",
+                "campaign_slogan": "{product} - Rendez la vie plus {style} !",
                 "date_format": "%d %B %Y",
                 "currency_symbol": "€"
             }
@@ -86,21 +86,22 @@ class InternationalizationManager:
         """获取区域化信息"""
         return self.language_templates.get(language, self.language_templates["zh-CN"])
 
-def multilingual_greeting_demo():
+def multilingual_ad_copy_demo():
     """
-    多语言问候演示
+    多语言广告文案生成演示
     """
-    print("=== 多语言问候演示 ===")
+    print("=== 多语言广告文案生成演示 ===")
     
     manager = InternationalizationManager()
     
     languages = ["zh-CN", "en-US", "ja-JP", "fr-FR"]
-    name = "张三"
+    product = "智能手机"
+    style = "科幻"
     
     for lang in languages:
-        template = manager.get_template("greeting", lang)
-        greeting = template.format(name=name)
-        print(f"{lang}: {greeting}")
+        template = manager.get_template("ad_copy", lang)
+        message = template.format(product=product, style=style)
+        print(f"{lang}: {message}")
 
 def localized_date_format_demo():
     """
@@ -147,105 +148,100 @@ def currency_localization_demo():
 
 def dynamic_language_switching_demo():
     """
-    动态语言切换演示
+    动态语言切换演示：广告文案
     """
-    print("\n=== 动态语言切换演示 ===")
+    print("\n=== 动态语言切换演示：广告文案 ===")
     
     manager = InternationalizationManager()
-    llm = get_llm()
     
-    # 用户偏好设置
-    user_preferences = {
-        "user1": "zh-CN",
-        "user2": "en-US", 
-        "user3": "ja-JP",
-        "user4": "fr-FR"
-    }
+    # 模拟不同市场的广告需求
+    market_campaigns = [
+        {"market": "中国市场", "product": "智能手机", "style": "科幻", "language": "zh-CN"},
+        {"market": "美国市场", "product": "smartphone", "style": "sci-fi", "language": "en-US"},
+        {"market": "日本市场", "product": "スマートフォン", "style": "SF", "language": "ja-JP"},
+        {"market": "法国市场", "product": "smartphone", "style": "science-fiction", "language": "fr-FR"}
+    ]
     
+    for campaign in market_campaigns:
+        template = manager.get_template("ad_copy", campaign["language"])
+        message = template.format(product=campaign["product"], style=campaign["style"])
+        print(f"{campaign['market']} ({campaign['language']}): {message}")
+
+def localized_formatting_demo():
+    """
+    本地化格式处理演示：广告文案
+    """
+    print("\n=== 本地化格式处理演示：广告文案 ===")
+    
+    manager = InternationalizationManager()
+    
+    languages = ["zh-CN", "en-US", "ja-JP", "fr-FR"]
     product = "智能手机"
-    features = "高清摄像头、长续航电池、快速充电"
+    features = "全息投影、量子通信、AI助手"
+    style = "科幻"
     
-    for user_id, preferred_lang in user_preferences.items():
-        # 获取对应语言的模板
-        template = manager.get_template("product_description", preferred_lang)
+    for lang in languages:
+        # 广告文案请求
+        ad_template = manager.get_template("ad_copy", lang)
+        ad_message = ad_template.format(product=product, style=style)
         
-        # 构建多语言消息
-        system_message = SystemMessage(
-            content=f"你是一个多语言产品助手，请使用{preferred_lang}语言回答用户问题。"
-        )
+        # 产品介绍
+        intro_template = manager.get_template("product_intro", lang)
+        intro_message = intro_template.format(product=product, features=features, style=style)
         
-        human_message = HumanMessage(
-            content=template.format(product=product, features=features)
-        )
+        # 广告口号
+        slogan_template = manager.get_template("campaign_slogan", lang)
+        slogan_message = slogan_template.format(product=product, style=style)
         
-        print(f"\n用户 {user_id} ({preferred_lang}):")
-        print(f"提示词: {human_message.content}")
+        # 日期格式化
+        locale_info = manager.get_locale_info(lang)
+        date_format = locale_info["date_format"]
+        current_date = datetime.now().strftime(date_format)
         
-        # 在实际应用中，这里会调用 LLM
-        # response = llm.invoke([system_message, human_message])
-        # print(f"AI 回复: {response.content}")
+        print(f"{lang}:")
+        print(f"  广告文案请求: {ad_message}")
+        print(f"  产品介绍: {intro_message}")
+        print(f"  广告口号: {slogan_message}")
+        print(f"  生成日期: {current_date}")
+        print()
 
-def locale_based_formatting_demo():
+def language_detection_demo():
     """
-    基于区域设置的格式化演示
+    语言检测与自动切换演示：广告文案
     """
-    print("\n=== 基于区域设置的格式化演示 ===")
-    
-    # 模拟不同区域的数字格式化
-    locales = [
-        ("zh_CN", "1,234.56"),
-        ("de_DE", "1.234,56"), 
-        ("fr_FR", "1 234,56"),
-        ("en_US", "1,234.56")
-    ]
-    
-    number = 1234.56
-    
-    print("不同区域的数字格式化:")
-    for locale_name, expected_format in locales:
-        print(f"{locale_name}: {expected_format}")
-    
-    # 时间格式化示例
-    current_time = datetime.now()
-    time_formats = [
-        ("zh-CN", "%Y年%m月%d日 %H时%M分%S秒"),
-        ("en-US", "%B %d, %Y %I:%M:%S %p"),
-        ("ja-JP", "%Y年%m月%d日 %H時%M分%S秒"),
-        ("fr-FR", "%d %B %Y %H:%M:%S")
-    ]
-    
-    print("\n不同区域的时间格式化:")
-    for locale, time_format in time_formats:
-        formatted_time = current_time.strftime(time_format)
-        print(f"{locale}: {formatted_time}")
-
-def template_translation_demo():
-    """
-    模板翻译演示
-    """
-    print("\n=== 模板翻译演示 ===")
+    print("\n=== 语言检测与自动切换演示：广告文案 ===")
     
     manager = InternationalizationManager()
     
-    # 源语言模板
-    source_template = manager.get_template("product_description", "zh-CN")
-    source_text = source_template.format(
-        product="智能手表",
-        features="心率监测、运动追踪、消息提醒"
-    )
+    # 模拟不同语言的广告需求
+    ad_requests = [
+        "请为智能手机创作科幻风格的广告文案",
+        "Please create a sci-fi style advertisement copy for smartphone",
+        "スマートフォンのためのSFスタイルの広告コピーを作成してください",
+        "Veuillez créer un texte publicitaire de style science-fiction pour smartphone"
+    ]
     
-    print(f"源文本 (中文): {source_text}")
+    # 简单的语言检测
+    def detect_language(text):
+        if any(char in text for char in "请为"):
+            return "zh-CN"
+        elif any(char in text for char in "Please"):
+            return "en-US"
+        elif any(char in text for char in "ください"):
+            return "ja-JP"
+        elif any(char in text for char in "Veuillez"):
+            return "fr-FR"
+        else:
+            return "en-US"
     
-    # 翻译到其他语言
-    target_languages = ["en-US", "ja-JP", "fr-FR"]
-    
-    for target_lang in target_languages:
-        target_template = manager.get_template("product_description", target_lang)
-        target_text = target_template.format(
-            product="smartwatch",  # 产品名称也需要翻译
-            features="heart rate monitoring, activity tracking, message notifications"
-        )
-        print(f"目标文本 ({target_lang}): {target_text}")
+    for request in ad_requests:
+        detected_lang = detect_language(request)
+        template = manager.get_template("ad_copy", detected_lang)
+        message = template.format(product="智能手机", style="科幻")
+        print(f"请求: {request}")
+        print(f"检测语言: {detected_lang}")
+        print(f"标准化请求: {message}")
+        print()
 
 def main():
     """主函数"""

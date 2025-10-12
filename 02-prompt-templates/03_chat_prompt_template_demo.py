@@ -2,30 +2,49 @@
 
 from __future__ import annotations
 
-import os
-from typing import Optional
+
 from langchain.prompts import ChatPromptTemplate
 from langchain.prompts.chat import SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
-from dotenv import load_dotenv
-from langchain_core.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
-
-# 从当前模块目录加载 .env，避免在仓库根运行时找不到配置
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
 def main() -> None:
+    """聊天模板示例：广告文案生成"""
+    print("=== 聊天模板示例：广告文案生成 ===")
 
-    system_template = "你是一位专业的{domain}专家。"
+    # 系统消息：定义角色和任务
+    system_template = "你是一位专业的广告文案专家，擅长创作各种风格的广告文案。"
     system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
 
-    human_template = "请总结以下文本：{text}"
+    # 用户消息：提供具体需求
+    human_template = "请写一篇关于{product}的{style}风格的广告文案。"
     human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
 
+    # 创建聊天提示词模板
     chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
-    final_messages = chat_prompt.format_prompt(domain="金融", text="...一段很长的金融报道...").to_messages()
-    print(final_messages)
+    
+    # 格式化提示词
+    final_messages = chat_prompt.format_prompt(
+        product="智能手机", 
+        style="科幻"
+    ).to_messages()
+    
+    print("生成的聊天消息：")
+    for message in final_messages:
+        print(f"{message.type}: {message.content}")
+    print()
 
-
+    # 演示不同产品的广告文案生成
+    products_styles = [
+        ("智能手表", "科技"),
+        ("电动汽车", "环保"),
+        ("智能家居系统", "温馨")
+    ]
+    
+    print("=== 不同产品的广告文案生成示例 ===")
+    for product, style in products_styles:
+        messages = chat_prompt.format_prompt(product=product, style=style).to_messages()
+        print(f"\n产品：{product}，风格：{style}")
+        print(f"用户消息：{messages[1].content}")
+        print("-" * 50)
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,7 @@
 """
 07 - 性能优化 Demo (Performance Optimization)
 
-演示模板缓存、批量处理和内存优化策略。
+演示广告文案生成的模板缓存、批量处理和内存优化策略。
 """
 
 import time
@@ -37,13 +37,13 @@ def get_cached_template(template_text: str, input_variables: tuple):
 
 def template_caching_demo():
     """
-    模板缓存演示
+    模板缓存演示：广告文案生成
     """
-    print("=== 模板缓存演示 ===")
+    print("=== 模板缓存演示：广告文案生成 ===")
     
     # 相同的模板文本和变量
-    template_text = "请为{product}写一段广告文案，目标客户是{audience}。"
-    input_vars = ("product", "audience")
+    template_text = "请为{product}创作{style}风格的广告文案。"
+    input_vars = ("product", "style")
     
     # 第一次调用 - 创建新模板
     start_time = time.time()
@@ -60,43 +60,43 @@ def template_caching_demo():
     print(f"缓存加速比: {time1/time2:.2f}x")
     
     # 验证模板功能
-    formatted_text = template1.format(product="智能手机", audience="年轻人")
+    formatted_text = template1.format(product="智能手机", style="科幻")
     print(f"\n格式化结果: {formatted_text}")
 
 def batch_processing_demo():
     """
-    批量处理演示
+    批量处理演示：广告文案生成
     """
-    print("\n=== 批量处理演示 ===")
+    print("\n=== 批量处理演示：广告文案生成 ===")
     
     # 创建基础模板
-    review_template = PromptTemplate(
-        template="请分析以下产品评论的情感倾向：{review}",
-        input_variables=["review"]
+    ad_template = PromptTemplate(
+        template="请为{product}创作{style}风格的广告文案。",
+        input_variables=["product", "style"]
     )
     
-    # 批量评论数据
-    reviews = [
-        "这个产品非常好用，质量很棒！",
-        "不太满意，功能比预期的要少。",
-        "性价比很高，推荐购买。",
-        "物流太慢了，等了很久才收到。",
-        "外观设计很漂亮，使用体验不错。"
+    # 批量产品数据
+    products = [
+        {"product": "智能手机", "style": "科幻"},
+        {"product": "智能手表", "style": "运动"},
+        {"product": "笔记本电脑", "style": "商务"},
+        {"product": "无线耳机", "style": "时尚"},
+        {"product": "平板电脑", "style": "娱乐"}
     ]
     
     # 单次处理
     print("单次处理模式:")
     single_start = time.time()
     single_prompts = []
-    for review in reviews:
-        prompt = review_template.format(review=review)
+    for product_data in products:
+        prompt = ad_template.format(**product_data)
         single_prompts.append(prompt)
     single_time = time.time() - single_start
     
     # 批量处理
     print("批量处理模式:")
     batch_start = time.time()
-    batch_prompts = review_template.format_prompt(review=reviews)
+    batch_prompts = ad_template.format_prompt(product=[p["product"] for p in products], style=[p["style"] for p in products])
     batch_time = time.time() - batch_start
     
     print(f"单次处理耗时: {single_time:.6f} 秒")

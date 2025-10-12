@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-模板变量验证与错误处理示例：变量验证、错误处理、边界情况处理
+广告文案生成的模板验证示例：变量验证、错误处理、边界情况处理
 """
 
 from __future__ import annotations
@@ -82,14 +82,14 @@ def safe_template_format(template: PromptTemplate, **kwargs) -> Tuple[bool, str,
         return False, "", errors
 
 def basic_validation_demo() -> None:
-    """基础验证演示"""
-    print("=== 基础验证演示 ===")
+    """基础验证演示：广告文案生成模板"""
+    print("=== 基础验证演示：广告文案生成模板 ===")
     
     # 测试模板
     test_templates = [
-        ("你好，{name}！今天感觉怎么样？", ["name"]),
-        ("产品：{product_name}，价格：{price}，库存：{stock}", ["product_name", "price"]),
-        ("欢迎{user-name}来到{company}", ["user-name", "company"]),
+        ("请为{product}创作{style}风格的广告文案。", ["product", "style"]),
+        ("产品：{product_name}，价格：{price}，目标用户：{target_audience}", ["product_name", "price", "target_audience"]),
+        ("欢迎{user-name}体验{product}的{feature}", ["user-name", "product", "feature"]),
         ("嵌套{test{inner}}变量", ["test", "inner"]),
     ]
     
@@ -112,21 +112,21 @@ def basic_validation_demo() -> None:
     print("\n" + "="*50 + "\n")
 
 def error_handling_demo() -> None:
-    """错误处理演示"""
-    print("=== 错误处理演示 ===")
+    """错误处理演示：广告文案生成"""
+    print("=== 错误处理演示：广告文案生成 ===")
     
     # 创建模板
     template = PromptTemplate.from_template(
-        "产品 '{product}' 的价格是 {price} 元，库存 {stock} 件。"
+        "请为 '{product}' 创作 {style} 风格的广告文案，突出 {key_feature} 特点。"
     )
     
     # 测试不同的输入情况
     test_cases = [
-        {"product": "手机", "price": "1999", "stock": "50"},  # 正常情况
-        {"product": "电脑"},  # 缺少变量
-        {"price": "2999", "stock": "100"},  # 缺少必需变量
+        {"product": "智能手机", "style": "科技感", "key_feature": "超长续航"},  # 正常情况
+        {"product": "笔记本电脑"},  # 缺少变量
+        {"style": "时尚", "key_feature": "轻薄便携"},  # 缺少必需变量
         {},  # 空输入
-        {"product": "平板", "price": "1299", "stock": "30", "extra": "多余"},  # 多余变量
+        {"product": "智能手表", "style": "运动", "key_feature": "健康监测", "extra": "多余"},  # 多余变量
     ]
     
     for i, case in enumerate(test_cases, 1):
@@ -214,8 +214,8 @@ def template_sanitization() -> None:
     print("\n" + "="*50 + "\n")
 
 def advanced_validation_rules() -> None:
-    """高级验证规则"""
-    print("=== 高级验证规则 ===")
+    """高级验证规则：广告文案模板"""
+    print("=== 高级验证规则：广告文案模板 ===")
     
     def validate_with_rules(template: str, rules: Dict[str, Any]) -> ValidationResult:
         """使用规则验证模板"""
@@ -248,7 +248,7 @@ def advanced_validation_rules() -> None:
     # 定义验证规则
     validation_rules = {
         "max_variables": 5,
-        "required_variables": ["user", "action"],
+        "required_variables": ["product", "style"],
         "forbidden_patterns": [
             r"密码|password",  # 禁止包含敏感词汇
             r"\$\{.*\}",       # 禁止特定变量格式
@@ -256,10 +256,10 @@ def advanced_validation_rules() -> None:
     }
     
     test_templates = [
-        "用户 {user} 执行了 {action} 操作",
-        "{user} 的密码是 {password}",
+        "请为{product}创作{style}风格的广告文案。",
+        "{product}的密码是{password}",
         "执行 ${command} 命令",
-        "{var1} {var2} {var3} {var4} {var5} {var6}",  # 超过变量限制
+        "{product} {style} {target_audience} {price} {feature1} {feature2} {feature3}",  # 超过变量限制
     ]
     
     for template in test_templates:

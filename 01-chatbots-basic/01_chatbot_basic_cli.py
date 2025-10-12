@@ -10,9 +10,8 @@ Module 1: Chatbots Basic CLI Demo
 from __future__ import annotations
 
 import os
-from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-
+from dotenv import load_dotenv
 # 从当前模块目录加载 .env
 def load_environment():
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
