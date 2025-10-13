@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from langchain_core.prompts import PromptTemplate
 
-def maim() -> None:
+def main() -> None:
     """多步骤模板组合示例：广告文案创作流程"""
     print("=== 多步骤模板组合示例：广告文案创作流程 ===")
 
@@ -71,4 +71,4 @@ def maim() -> None:
 
 
 if __name__ == "__main__":
-    maim()
+    main()

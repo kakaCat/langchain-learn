@@ -19,15 +19,24 @@
 - **内容**: 系统消息模板、用户消息模板、消息格式化
 - **示例**: 金融文本总结，多角色消息组合
 
-### 4. 结构化输出（JSON/Schema/函数调用）
-- **文件**: `04_structured_output_demo.py`
-- **内容**: JSON 模式输出、Pydantic 模型约束、函数调用模板、输出解析器集成
-- **示例**: 用户信息结构化提取，支持 JSON Schema 和 Pydantic 模型验证
-  - **具体实现**: 使用 `JsonOutputParser` 解析 JSON 输出，通过 `PydanticOutputParser` 结合 Pydantic 模型（UserInfo）进行类型约束，构建函数调用模板实现结构化响应
+### 4. 结构化输出（JSON / Pydantic / 函数调用）
+- **文件**:
+  - `04_01_json_output_demo.py`
+  - `04_02_pydantic_output_demo.py`
+  - `04_03_function_calling_demo.py`
+- **内容**: JSON 格式化输出与解析器、Pydantic 模型约束与验证、函数/工具调用模板与输出解析器集成
+- **示例**: 用户信息结构化提取，支持严格类型验证与 JSON Schema；基于函数签名的安全工具调用
+  - **具体实现**: 使用 `JsonOutputParser` 解析与校验 JSON 输出；通过 `PydanticOutputParser` 结合 Pydantic 模型（如 UserInfo）进行类型约束与错误处理；构建函数/工具调用模板实现结构化响应
 
 ### 5. 模板组合与嵌套
-- **文件**: `05_template_composition_demo.py`
-- **内容**: 多个模板的组合使用、模板的继承和扩展、动态模板选择
+- **文件**:
+  - `05_01_basic_template_composition_demo.py`（基础模板组合）
+  - `05_02_chat_template_composition_demo.py`（聊天模板组合）
+  - `05_03_template_inheritance_demo.py`（模板继承与扩展）
+  - `05_04_multi_step_conversation_demo.py`（多步骤对话流程）
+  - `05_05_dynamic_template_selection_demo.py`（动态模板选择）
+  - `05_template_composition_demo.py`（综合示例）
+- **内容**: 多个模板的组合使用、模板继承与扩展、动态模板选择、分步对话编排
 - **示例**: 多步骤对话流程，通过模板组合实现复杂交互逻辑
   - **具体实现**: 基础模板组合（问候+产品介绍）、聊天模板组合（系统+用户消息）、模板继承（扩展基础模板）、动态模板选择（根据用户类型选择模板）、多步骤对话流程（注册→验证→完成）
 

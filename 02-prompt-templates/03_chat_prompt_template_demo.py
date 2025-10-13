@@ -2,11 +2,42 @@
 
 from __future__ import annotations
 
-
+import os
+from dotenv import load_dotenv
 from langchain.prompts import ChatPromptTemplate
 from langchain.prompts.chat import SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain_openai import ChatOpenAI
+
+# 从当前模块目录加载 .env
+def load_environment():
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+
+
+def get_llm() -> ChatOpenAI:
+
+    """创建并配置语言模型实例"""
+    api_key = os.getenv("OPENAI_API_KEY")
+    model = os.getenv("OPENAI_MODEL", "deepseek-chat")
+    base_url = os.getenv("OPENAI_BASE_URL")
+    temperature = float(os.getenv("OPENAI_TEMPERATURE", "0"))
+    max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "512"))
+    kwargs = {
+        "model": model,
+        "api_key": api_key,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "timeout": 120,
+        "max_retries": 3,
+        "request_timeout": 120,
+        "verbose": False,
+        "base_url": base_url
+    }
+
+    return ChatOpenAI(**kwargs)
+
 
 def main() -> None:
+    load_environment()
     """聊天模板示例：广告文案生成"""
     print("=== 聊天模板示例：广告文案生成 ===")
 
@@ -44,6 +75,11 @@ def main() -> None:
         messages = chat_prompt.format_prompt(product=product, style=style).to_messages()
         print(f"\n产品：{product}，风格：{style}")
         print(f"用户消息：{messages[1].content}")
+
+        # 调用语言模型生成响应
+        response =  get_llm().invoke(messages)
+        print(f"模型回复：{response.content}")
+        
         print("-" * 50)
 
 if __name__ == "__main__":
