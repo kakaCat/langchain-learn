@@ -4,7 +4,7 @@ import os
 import langchain
 from dotenv import load_dotenv
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 
@@ -78,10 +78,10 @@ def get_llm() -> ChatOpenAI:
 
 
 # 内存存储（仅进程内，不持久化）
-_store: dict[str, ChatMessageHistory] = {}
+_store: dict[str, InMemoryChatMessageHistory] = {}
 
 
-def get_in_memory_history(session_id: str) -> ChatMessageHistory:
+def get_in_memory_history(session_id: str) -> InMemoryChatMessageHistory:
     """
     使用内存存储获取或创建聊天历史记录
     
@@ -89,7 +89,7 @@ def get_in_memory_history(session_id: str) -> ChatMessageHistory:
         session_id: 会话标识符
         
     Returns:
-        ChatMessageHistory: 对应会话的聊天历史记录
+        InMemoryChatMessageHistory: 对应会话的聊天历史记录
         
     Raises:
         ValueError: 当session_id为空或无效时抛出
@@ -101,7 +101,7 @@ def get_in_memory_history(session_id: str) -> ChatMessageHistory:
             
         if session_id not in _store:
             print(f"为会话 {session_id} 创建新的内存历史记录")
-            _store[session_id] = ChatMessageHistory()
+            _store[session_id] = InMemoryChatMessageHistory()
         else:
             print(f"获取会话 {session_id} 的现有内存历史记录")
             

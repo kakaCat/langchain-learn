@@ -53,6 +53,7 @@ entities:
     - [AI记忆信息总结（摘要）压缩](#summary)
     - [聊天消息记忆滑窗保留](#limited)
     - [聊天消息记忆令牌滑窗压缩（Token）](#token-compression-window)
+  - [LangChain 记忆模块总结](#module-summary)
   - [常见错误与快速排查 (Q/A)](#qa)
     - [存储类型选择指南](#qa-storage-choice)
     - [滑窗 vs 令牌压缩如何取舍](#qa-window-vs-compression)
@@ -60,7 +61,6 @@ entities:
     - [避免上下文爆炸的实用建议](#qa-context-bloat)
     - [压缩损失的评估与监控](#qa-eval)
   - [参考资料](#references)
-  - [更新记录](#changelog)
   - [总结](#summary-final)
 
 ---
@@ -841,77 +841,6 @@ if __name__ == "__main__":
 - 用 InMemoryChatMessageHistory 存储聊天的记忆。
 - 经过几轮的对话，最后告诉模型“请总结一下我们的对话内容。”，实现对聊天过程的数据进行压缩。
 
-
-## LangChain 记忆模块总结
-
-### 核心记忆类型与结构
-
-```
-BaseChatMessageHistory（会话消息历史）
-├── InMemoryChatMessageHistory（内存）
-├── FileChatMessageHistory（文件）
-├── RedisChatMessageHistory（Redis）
-└── SQLChatMessageHistory（SQL/DB）
-
-Memory Strategies（记忆策略）
-├── Limited History（滑窗保留）
-├── Token Compression（令牌滑窗/摘要）
-├── Summary Memory（摘要记忆）
-├── Entity Memory（实体记忆）
-├── VectorStore Memory（向量存储记忆）
-└── Key-Value Memory（键值记忆）
-```
-
-### 记忆类型功能对比
-
-| 记忆类型 | 主要用途 | 持久性 | 上下文保留 | 复杂度 | 适用场景 |
-|----------|----------|--------|------------|--------|----------|
-| 内存存储（InMemory） | 单会话快速读写 | 否 | 最近上下文 | 低 | 临时对话、原型验证 |
-| 文件存储（File） | 本地持久化 | 是 | 全量可控 | 低 | 个人项目、小型应用 |
-| Redis/SQL 存储 | 服务端持久化 | 是 | 全量可控 | 中 | 生产环境、并发与多用户 |
-| 向量存储记忆 | 语义检索长期知识 | 是 | 主题语义保留 | 中 | FAQs、知识库、RAG 结合 |
-| 实体记忆 | 关键人物/偏好/事实 | 可选 | 关键实体强化 | 中 | 个性化助手、客户画像 |
-| 摘要记忆 | 长对话压缩 | 可选 | 主题与要点 | 中 | 长会话成本控制 |
-| 滑窗保留 | 保留最近 N 条 | 否/是 | 近期上下文 | 低 | 简洁高效、无需摘要 |
-| 令牌滑窗压缩 | 令牌预算内保留 | 可选 | 近期+旧摘要 | 中 | 成本敏感、上下文平衡 |
-| 键值记忆 | 参数/配置/状态 | 可选 | 精准字段 | 低 | 工具调用、流程状态 |
-
-### 记忆选择指南
-
-1. 临时对话/原型 → `InMemoryChatMessageHistory`
-   - 单用户或单会话、速度优先、无需持久化。
-2. 本地轻量级持久化 → `FileChatMessageHistory`
-   - 低运维、易备份、开发机或个人项目。
-3. 生产持久化与并发 → `Redis/SQLChatMessageHistory`
-   - 多用户、可靠存储、可做审计与统计。
-4. 长期知识与检索 → 向量存储记忆（结合 RAG）
-   - 文档/FAQ/手册，语义召回提升上下文质量。
-5. 个性化与画像 → 实体记忆（偏好/身份/约束）
-   - 提取并更新关键实体，减少重复问答。
-6. 长会话成本控制 → 摘要记忆或令牌滑窗压缩
-   - 定期摘要旧对话，保留近期消息与关键事实。
-7. 工具与流程参数 → 键值记忆
-   - 保存会话上下文中的指令、配置、临时变量。
-
-### 最佳实践
-
-- 历史键名一致：`MessagesPlaceholder("chat_history")` 与链输入键保持一致。
-- 会话隔离：为不同用户/会话设置独立 `session_id` 并正确传递。
-- 混合策略：滑窗 + 摘要 + 实体记忆联合使用，兼顾近期与长期。
-- 成本控制：按令牌预算触发压缩，避免超上下文窗口与费用激增。
-- 冗余治理：去重系统提示与规则、合并冗长回复与无效噪声。
-- 持久化选择：本地用文件，服务端用 Redis/SQL，注意并发与一致性。
-
-### 策略与工具补充
-
-- 令牌计数：使用 `tiktoken` 估算上下文长度，按预算触发压缩。
-- 会话封装：用 `RunnableWithMessageHistory` 集成链与历史，简化多轮对话。
-- 摘要生成：系统提示约束“保留关键事实与任务上下文”，避免信息丢失。
-- 实体抽取：定期从对话抽取人物/偏好/任务状态并更新实体存储。
-- 检索增强：向量存储结合记忆，优先召回相关知识后再注入上下文。
-
-
-
 <a id="limited" data-alt="限制 历史 滑窗 Limited History"></a>
 ### 聊天消息记忆滑窗保留
 
@@ -1426,6 +1355,75 @@ if __name__ == "__main__":
 - 压缩逻辑：保留最新的几条消息，生成对旧消息的摘要，替换旧消息。
 
 
+<a id="module-summary" data-alt="模块 总结 概览 LangChain Memory Modules"></a>
+## LangChain 记忆模块总结
+
+### 核心记忆类型与结构
+
+```
+BaseChatMessageHistory（会话消息历史）
+├── InMemoryChatMessageHistory（内存）
+├── FileChatMessageHistory（文件）
+├── RedisChatMessageHistory（Redis）
+└── SQLChatMessageHistory（SQL/DB）
+
+Memory Strategies（记忆策略）
+├── Limited History（滑窗保留）
+├── Token Compression（令牌滑窗/摘要）
+├── Summary Memory（摘要记忆）
+├── Entity Memory（实体记忆）
+├── VectorStore Memory（向量存储记忆）
+└── Key-Value Memory（键值记忆）
+```
+
+### 记忆类型功能对比
+
+| 记忆类型 | 主要用途 | 持久性 | 上下文保留 | 复杂度 | 适用场景 |
+|----------|----------|--------|------------|--------|----------|
+| 内存存储（InMemory） | 单会话快速读写 | 否 | 最近上下文 | 低 | 临时对话、原型验证 |
+| 文件存储（File） | 本地持久化 | 是 | 全量可控 | 低 | 个人项目、小型应用 |
+| Redis/SQL 存储 | 服务端持久化 | 是 | 全量可控 | 中 | 生产环境、并发与多用户 |
+| 向量存储记忆 | 语义检索长期知识 | 是 | 主题语义保留 | 中 | FAQs、知识库、RAG 结合 |
+| 实体记忆 | 关键人物/偏好/事实 | 可选 | 关键实体强化 | 中 | 个性化助手、客户画像 |
+| 摘要记忆 | 长对话压缩 | 可选 | 主题与要点 | 中 | 长会话成本控制 |
+| 滑窗保留 | 保留最近 N 条 | 否/是 | 近期上下文 | 低 | 简洁高效、无需摘要 |
+| 令牌滑窗压缩 | 令牌预算内保留 | 可选 | 近期+旧摘要 | 中 | 成本敏感、上下文平衡 |
+| 键值记忆 | 参数/配置/状态 | 可选 | 精准字段 | 低 | 工具调用、流程状态 |
+
+### 记忆选择指南
+
+1. 临时对话/原型 → `InMemoryChatMessageHistory`
+   - 单用户或单会话、速度优先、无需持久化。
+2. 本地轻量级持久化 → `FileChatMessageHistory`
+   - 低运维、易备份、开发机或个人项目。
+3. 生产持久化与并发 → `Redis/SQLChatMessageHistory`
+   - 多用户、可靠存储、可做审计与统计。
+4. 长期知识与检索 → 向量存储记忆（结合 RAG）
+   - 文档/FAQ/手册，语义召回提升上下文质量。
+5. 个性化与画像 → 实体记忆（偏好/身份/约束）
+   - 提取并更新关键实体，减少重复问答。
+6. 长会话成本控制 → 摘要记忆或令牌滑窗压缩
+   - 定期摘要旧对话，保留近期消息与关键事实。
+7. 工具与流程参数 → 键值记忆
+   - 保存会话上下文中的指令、配置、临时变量。
+
+### 最佳实践
+
+- 历史键名一致：`MessagesPlaceholder("chat_history")` 与链输入键保持一致。
+- 会话隔离：为不同用户/会话设置独立 `session_id` 并正确传递。
+- 混合策略：滑窗 + 摘要 + 实体记忆联合使用，兼顾近期与长期。
+- 成本控制：按令牌预算触发压缩，避免超上下文窗口与费用激增。
+- 冗余治理：去重系统提示与规则、合并冗长回复与无效噪声。
+- 持久化选择：本地用文件，服务端用 Redis/SQL，注意并发与一致性。
+
+### 策略与工具补充
+
+- 令牌计数：使用 `tiktoken` 估算上下文长度，按预算触发压缩。
+- 会话封装：用 `RunnableWithMessageHistory` 集成链与历史，简化多轮对话。
+- 摘要生成：系统提示约束“保留关键事实与任务上下文”，避免信息丢失。
+- 实体抽取：定期从对话抽取人物/偏好/任务状态并更新实体存储。
+- 检索增强：向量存储结合记忆，优先召回相关知识后再注入上下文。
+
 <a id="qa" data-alt="常见 错误 排查 Q/A"></a>
 ## 常见错误与快速排查 (Q/A)
 
@@ -1477,16 +1475,30 @@ if __name__ == "__main__":
 - Ollama 文档：https://ollama.com/docs
 
 
-<a id="references" data-alt="引用 参考 文献 链接"></a>
-## 参考资料
-
-- LangChain Memory 指南：https://python.langchain.com/docs/modules/memory/
-- RunnableWithMessageHistory（表达式语言记忆）：https://python.langchain.com/docs/expression_language/memory/
-- ChatMessageHistory（聊天消息记忆）：https://python.langchain.com/docs/modules/memory/chat_messages/
-- 项目示例目录：`./04-memory/`、`./11-token-compression/`
-- 相关教程：[`langchain-chatbot-tutorial.md`](./langchain-chatbot-tutorial.md)、[`langchain-prompt-templates-tutorial.md`](./langchain-prompt-templates-tutorial.md)
-
-
 <a id="summary-final" data-alt="总结 收尾 最佳实践"></a>
 ## 总结
+
+通过本教程，你已经系统掌握了 LangChain 的“记忆”家族与工程化落地方法。从“聊天消息历史”到“摘要/实体/向量/键值/限窗/Token 压缩”等多种记忆策略，形成了可在不同业务场景下组合使用的记忆工具箱。
+
+- 能力清单：
+  - 聊天消息记忆存储方式
+  - 摘要记忆与限窗策略（长会话稳态压缩）
+  - 实体记忆（追踪人物/公司/产品等关键实体属性）
+  - 向量记忆（语义检索融入对话上下文）
+  - 键值记忆（配置/偏好/状态的快速读取）
+  - Token 压缩（保留关键信息，降低上下文成本）
+
+- 选型建议：
+  - 小型/临时会话：内存或文件持久化；强调简单与可调试性
+  - 多用户/并发：Redis/SQL；强调可靠性、一致性与清理策略
+  - 强语义回忆：向量记忆结合摘要/限窗，避免上下文膨胀
+  - 稳态信息：键值记忆（配置/画像），与安全边界配合
+
+- 工程要点：
+  - 明确记忆生命周期（创建、更新、清理），避免无限增长
+  - 建立输入治理：去重、时间戳、来源标注，减少“幻觉串联”
+  - 观测与调试：启用 tracing/日志；记录命中来源（检索/摘要）
+  - 隐私与合规：对敏感字段脱敏/加密；控制导出与留存时长
+
+总之，记忆并非“越多越好”，而是“恰到好处”：在成本、性能与可维护性之间平衡，按场景组合多种策略，形成可靠、可扩展的对话与知识回忆能力。你可以从最小的聊天历史持久化开始，逐步叠加摘要/向量/键值记忆，最终构建适合生产的记忆体系。
 

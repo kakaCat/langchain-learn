@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain.globals import set_debug
 
@@ -42,7 +42,7 @@ store = {}
 def get_session_history(session_id: str):
     """根据session_id获取或创建对应的聊天历史记录"""
     if session_id not in store:
-        store[session_id] = ChatMessageHistory()  # 使用内存存储
+        store[session_id] = InMemoryChatMessageHistory()  # 使用内存存储
     return store[session_id]
 
 def create_summary_chain():

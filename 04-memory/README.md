@@ -5,10 +5,10 @@
 ## ✅ 已实现的学习点
 
 ### 1. 聊天消息历史存储
-- **文件**: `01_chat_message_history_demo.py`
+- **文件**: `01_01_in_memory_history_demo.py`、`01_02_file_history_demo.py`、`01_03_redis_history_demo.py`、`01_03_sql_history_demo.py`
 - **内容**: 内存存储、文件存储、数据库存储、会话管理
 - **示例**: 多会话聊天历史管理，支持不同存储后端
-  - **具体实现**: 使用 `ChatMessageHistory` 类管理内存存储，`FileChatMessageHistory` 实现文件持久化，`RedisChatMessageHistory` 和 `SQLChatMessageHistory` 支持数据库存储，基于 `session_id` 的多会话支持
+- **具体实现**: 使用 `InMemoryChatMessageHistory` 类管理内存存储，`FileChatMessageHistory` 实现文件持久化，`RedisChatMessageHistory` 和 `SQLChatMessageHistory` 支持数据库存储，基于 `session_id` 的多会话支持
 
 ### 2. 实体记忆
 - **文件**: `02_entity_memory_demo.py`
@@ -23,7 +23,7 @@
   - **具体实现**: 使用 LangChain 的摘要记忆机制自动生成对话摘要，减少历史消息的 Token 消耗，通过摘要检索快速获取对话关键信息
 
 ### 4. Token 压缩记忆
-- **文件**: `03_token_compression_memory_demo.py`
+- **文件**: `05_token_compression_memory_demo.py`
 - **内容**: Token 计数、消息压缩、智能截断、性能优化
 - **示例**: 长对话历史智能压缩
   - **具体实现**: 使用 `tiktoken` 库进行 Token 计数，实现智能消息截断策略，当历史消息超过阈值时自动压缩，保持对话连贯性的同时优化性能
@@ -35,13 +35,13 @@
   - **具体实现**: 自定义 `LimitedChatMessageHistory` 类实现消息数量限制，使用滑动窗口机制保持最新对话，防止内存溢出，优化系统性能
 
 ### 6. 键值记忆
-- **文件**: `05_key_value_memory_demo.py`
+- **文件**: `06_key_value_memory_demo.py`
 - **内容**: 键值存储、自定义记忆类、结构化数据、灵活检索
 - **示例**: 结合键值存储的智能记忆
   - **具体实现**: 继承 `BaseChatMessageHistory` 实现 `KeyValueChatMessageHistory` 类，结合消息历史和键值存储，支持结构化数据存储和灵活检索
 
 ### 7. 向量存储记忆
-- **文件**: `06_vector_store_memory_demo.py`
+- **文件**: `01_05_vector_store_memory_demo.py`
 - **内容**: 向量数据库、语义检索、相似度匹配、上下文理解
 - **示例**: 基于语义的对话记忆检索
   - **具体实现**: 使用 FAISS 向量数据库存储对话内容，通过 `VectorStoreRetrieverMemory` 实现语义检索，基于相似度匹配找到相关历史对话，增强上下文理解能力
@@ -59,9 +59,16 @@
 
 3. **运行示例**：
    ```bash
-   python 01_chat_message_history_demo.py
+   python 01_01_in_memory_history_demo.py
+   python 01_02_file_history_demo.py
+   python 01_03_redis_history_demo.py
+   python 01_03_sql_history_demo.py
+   python 01_05_vector_store_memory_demo.py
    python 02_entity_memory_demo.py
-   python 06_vector_store_memory_demo.py
+   python 03_summary_memory_demo.py
+   python 04_limited_history_memory_demo.py
+   python 05_token_compression_memory_demo.py
+   python 06_key_value_memory_demo.py
    ```
 
 ## 🎯 学习目标

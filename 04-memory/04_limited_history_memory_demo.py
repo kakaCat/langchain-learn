@@ -1,7 +1,6 @@
 
 import os
 from dotenv import load_dotenv
-from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
@@ -69,7 +68,7 @@ store = {}
 def get_limited_history(session_id: str):
     if session_id not in store:
         print(f"为session_id {session_id} 创建新的LimitedChatMessageHistory实例")
-        # 直接使用我们自定义的类，不继承ChatMessageHistory
+        # 直接使用我们自定义的类，不依赖任何内置历史类
         store[session_id] = LimitedChatMessageHistory(max_messages=4)  # 只保留4条消息
     return store[session_id]
 
