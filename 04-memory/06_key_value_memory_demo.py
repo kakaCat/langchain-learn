@@ -1,7 +1,7 @@
 import os
 import sys
 
-sys.stdout.reconfigure(encoding='utf-8')
+
 from dotenv import load_dotenv
 from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage

@@ -42,7 +42,7 @@ def get_llm() -> ChatOpenAI:
         "timeout": 120,
         "max_retries": 3,
         "request_timeout": 120,
-        "verbose": False,
+        "verbose": True,
         "base_url": base_url
     }
     

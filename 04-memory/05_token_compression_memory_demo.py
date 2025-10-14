@@ -1,4 +1,5 @@
 import os
+import tiktoken
 from typing import Dict, List
 
 from dotenv import load_dotenv
@@ -7,7 +8,8 @@ from langchain_core.messages import BaseMessage, get_buffer_string
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
-import tiktoken
+from langchain.globals import set_debug
+
 
 
 # 从当前模块目录加载 .env
@@ -117,6 +119,7 @@ def create_conversation_chain():
 
 def main() -> None:
     try:
+        set_debug(True)
         # 加载环境变量
         load_environment()
         
@@ -129,7 +132,7 @@ def main() -> None:
             {"input": "你好，我叫张三。"},
             config={"configurable": {"session_id": session_id}},
             verbose=True
-        )
+        ) 
         print(f"AI响应: {response.content}")
         
         # 检查并压缩消息

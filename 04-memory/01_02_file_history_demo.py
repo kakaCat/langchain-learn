@@ -38,7 +38,7 @@ def get_llm() -> ChatOpenAI:
 
 def get_file_history(session_id: str) -> FileChatMessageHistory:
     """使用文件存储聊天历史记录（JSON）"""
-    return FileChatMessageHistory(f"chat_history_{session_id}.json")
+    return FileChatMessageHistory(f"chat_history_{session_id}.json", encoding="utf-8", ensure_ascii=False)
 
 
 def create_conversation_chain() -> RunnableWithMessageHistory:

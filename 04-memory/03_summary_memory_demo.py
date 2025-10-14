@@ -4,7 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_openai import ChatOpenAI
-
+from langchain.globals import set_debug
 
 
 # 从当前模块目录加载 .env
@@ -73,6 +73,8 @@ def create_summary_chain():
 
 def main() -> None:
     try:
+        set_debug(True)
+
         load_environment()
         
         # 创建带历史记忆的会话链
