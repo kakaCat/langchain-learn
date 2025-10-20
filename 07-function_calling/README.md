@@ -30,7 +30,29 @@
 - **具体实现**: 
   - 命令行交互界面
   - 工具调用结果展示
-  - 错误处理和异常管理
+- 错误处理和异常管理
+
+### 4. DDGS（DuckDuckGo Search）外部搜索工具
+- **文件**: `02_ddgs_search_tool_demo.py`
+- **内容**: 使用 `duckduckgo_search` 的 `DDGS` 实现文本搜索；以 `@tool` 封装为 `web_search` 并集成到 Agent。
+- **示例**:
+  - 直接搜索模式（不依赖 LLM）：`python 02_ddgs_search_tool_demo.py --mode direct`
+  - Agent 工具模式（需 `.env` 配置 OPENAI_API_KEY）：`python 02_ddgs_search_tool_demo.py --mode agent`
+- **要点**:
+  - 统一返回结构：`title/url/snippet`
+  - 参数校验与错误处理（空查询、条数限制等）
+  - 提示词引导模型“需要事实检索时优先调用 web_search 工具”
+
+### 5. Tavily 搜索工具（结构化检索与引用）
+- **文件**: `03_tavily_search_tool_demo.py`
+- **内容**: 使用 `tavily-python` 实现文本检索，并以 `@tool` 封装为 `web_search_tavily` 集成到 Agent；返回结果包含文档片段与来源链接，适合 LLM 总结。
+- **示例**:
+  - 直接搜索模式（需 `.env` 配置 `TAVILY_API_KEY`，不依赖 OPENAI）：`python 03_tavily_search_tool_demo.py`
+  - Agent 工具模式（需 `.env` 配置 `OPENAI_API_KEY` 与 `TAVILY_API_KEY`）：`python 03_tavily_search_tool_demo.py`
+- **要点**:
+  - 统一返回结构：`title/url/snippet`
+  - 自动根据环境变量选择运行模式（有 `OPENAI_API_KEY` 则运行 Agent，无则直接检索）
+  - 更适合“检索+引用链接”的总结型任务
 
 ## 进阶学习点
 
@@ -71,11 +93,19 @@ pip install -r requirements.txt
 OPENAI_API_KEY=your_api_key_here
 OPENAI_MODEL=gpt-3.5-turbo
 OPENAI_BASE_URL=https://api.openai.com/v1
+
+# Tavily（推荐用于结构化检索与引用）
+TAVILY_API_KEY=your_tavily_api_key_here
+
+# 可选：DDGS 搜索无需上述变量，直接运行 --mode direct 即可
 ```
 
 3. 运行示例：
 ```bash
 python chatbot_tools_demo.py
+python 02_ddgs_search_tool_demo.py --mode direct
+python 02_ddgs_search_tool_demo.py --mode agent
+python 03_tavily_search_tool_demo.py
 ```
 
 ## 学习目标

@@ -15,3 +15,5 @@ langchain_community>=0.2
 # 常用辅助
 tiktoken>=0.7
 python-dotenv>=1.0
+duckduckgo_search>=8.1.1
+tavily-python

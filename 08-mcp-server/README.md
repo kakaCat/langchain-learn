@@ -16,6 +16,51 @@
 - **示例**: 自动启动子进程，工具发现，工具调用演示
 - **具体实现**: 子进程管理，JSON 消息发送/接收，错误处理
 
+### 2.1 LLM 驱动的 MCP 客户端 Agent
+- **文件**: `mcp_client_agent_demo.py`
+- **内容**: 通过 LangChain 构建由大模型驱动的 Agent，将 MCP 服务器工具映射为 LangChain 工具，由模型自动选择/调用完成任务
+- **示例**: 自动调用 `mcp_get_time` / `mcp_echo` / `mcp_add`
+- **运行**:
+  ```bash
+  # 在本目录下配置 .env 或环境变量：OPENAI_API_KEY
+  python 08-mcp-server/mcp_client_agent_demo.py
+  ```
+  
+  输出示例：
+  - 提问当前时间 → 调用 `mcp_get_time` 返回 ISO 时间字符串
+  - 文本回显 → 调用 `mcp_echo("你好 MCP")`
+  - 加法计算 → 调用 `mcp_add(15, 23)` 返回计算结果
+
+### 2.2 拆分版：客户端/服务端入口
+- **文件**: `mcp_agent_server.py`（服务端）、`mcp_agent_client.py`（客户端）
+- **运行**:
+  ```bash
+  # 启动服务端（独立入口）
+  python 08-mcp-server/mcp_agent_server.py
+
+  # 启动客户端（LLM 驱动 Agent）
+  # 请先在本目录配置 .env 或设置 OPENAI_API_KEY
+  python 08-mcp-server/mcp_agent_client.py
+  ```
+- **说明**: 拆分版更利于在不同终端单独启动和联调，保持职责清晰。
+
+### 2.3 传输层选择：stdio / http / ws
+- **说明**: 客户端现已支持三种传输层。默认使用本地 `stdin/stdout`（以子进程启动服务器脚本）；也可连接远端 HTTP 或 WebSocket 服务。
+- **使用示例**:
+  ```bash
+  # 1) stdio（默认）：本地子进程启动服务器脚本
+  python 08-mcp-server/mcp_agent_client.py --transport stdio --server-path 08-mcp-server/mcp_server_demo.py
+
+  # 2) http：连接远端 HTTP RPC（POST /rpc, body: {id, method, params}）
+  python 08-mcp-server/mcp_agent_client.py --transport http --http-url http://localhost:8000/rpc
+
+  # 3) ws：连接远端 WebSocket RPC（消息体: {id, method, params}）
+  python 08-mcp-server/mcp_agent_client.py --transport ws --ws-url ws://localhost:8001/rpc
+  ```
+- **注意**:
+  - HTTP/WS 模式需要远端服务器实现统一 RPC 协议（`/rpc`），当前仓库仅提供 `stdin/stdout` 版本服务端，可按需扩展。
+  - `ws` 模式需安装依赖：`pip install websocket-client`。
+
 ### 3. 基础工具定义与调用
 - **文件**: `mcp_server_demo.py`
 - **内容**: 工具定义规范，参数验证，错误处理

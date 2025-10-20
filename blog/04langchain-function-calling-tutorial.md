@@ -50,6 +50,9 @@ qa_intents:
   - [引言](#intro)
   - [函数调用与工具的核心概念](#concepts)
   - [AI 使用工具完成任务](#define-tools)
+    - [AI调用内部方法完成任务](#call-internal-methods)
+    - [AI调用API 接口完成任务](#call-api-interface)
+  - [工具模块总结](#tools-summary)
   - [常见错误与快速排查 (Q/A)](#qa)
   - [官方链接与源码](#links)
   - [总结](#summary)
@@ -115,6 +118,8 @@ qa_intents:
 <a id="define-tools" data-alt="@tool 装饰器 定义工具 参数校验 错误处理"></a>
 ## AI 使用工具完成任务
 
+<a id="call-internal-methods" data-alt="AI 调用 内部 方法 完成 任务"></a>
+### AI调用内部方法完成任务 
 
 ```python
 import os
@@ -336,6 +341,280 @@ if __name__ == "__main__":
 - 工具内部应处理错误与边界（例如除零），并返回明确的结构。
 - 当你替换为真实 API（天气/翻译）时，务必在工具内进行参数校验、异常捕获与安全限制。
 
+<a id="call-api-interface" data-alt="AI 调用 API 接口 完成 任务"></a>
+### AI调用API 接口完成任务 
+
+- 注册与获取密钥：访问 [Tavily](https://www.tavily.com/) 官网并注册账号，登录控制台创建并复制 `API Key`（免费额度足够开发测试）。
+
+requirements.txt
+```text
+# 本地模型（使用 Ollama 时需要）
+langchain-ollama>=0.1
+
+langchain_community>=0.2
+# 常用辅助
+tiktoken>=0.7
+python-dotenv>=1.0
+duckduckgo_search>=8.1.1
+tavily-python
+```
+
+.env
+```text
+OPENAI_API_KEY=your_api_key_here
+OPENAI_BASE_URL=https://api.deepseek.com
+OPENAI_MODEL=deepseek-chat
+OPENAI_TEMPERATURE=0.2
+OPENAI_MAX_TOKENS=512
+
+TAVILY_API_KEY= your_tavily_api_key_here
+```
+
+代码实现
+```python
+import os
+from typing import List, Dict
+from dotenv import load_dotenv
+
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+
+
+# ============================
+# 环境加载与 LLM 配置
+# ============================
+def load_environment() -> None:
+    """从当前模块目录加载 .env"""
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+
+
+def get_llm() -> ChatOpenAI:
+    """创建并配置语言模型实例（用于 Agent 模式）"""
+    api_key = os.getenv("OPENAI_API_KEY")
+    model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    base_url = os.getenv("OPENAI_BASE_URL")
+    temperature = float(os.getenv("OPENAI_TEMPERATURE", "0"))
+    max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "512"))
+
+    kwargs = {
+        "model": model,
+        "api_key": api_key,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "timeout": 120,
+        "max_retries": 3,
+        "request_timeout": 120,
+        "base_url": base_url,
+    }
+    return ChatOpenAI(**kwargs)
+
+
+# ============================
+# Tavily 搜索实现（直接调用）
+# ============================
+def tavily_text_search(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+    """
+    使用 Tavily API 进行文本搜索。
+
+    返回：[{"title", "url", "snippet"}]
+    """
+    if not query or not query.strip():
+        raise ValueError("query 不能为空")
+    if max_results <= 0:
+        raise ValueError("max_results 必须为正整数")
+
+    api_key = os.getenv("TAVILY_API_KEY")
+    if not api_key:
+        raise RuntimeError("未检测到 TAVILY_API_KEY，请在 .env 中配置后重试。")
+
+    try:
+        from tavily import TavilyClient
+    except Exception as e:
+        raise RuntimeError("缺少 tavily-python 依赖，请先安装：pip install tavily-python") from e
+
+    client = TavilyClient(api_key=api_key)
+
+    # TavilyClient.search 返回包含 results（title/url/content 等）
+    resp = client.search(query=query, max_results=max_results)
+    results = resp.get("results", [])
+
+    normalized: List[Dict[str, str]] = []
+    for r in results[:max_results]:
+        normalized.append(
+            {
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "snippet": r.get("content", "") or r.get("text", ""),
+            }
+        )
+    return normalized
+
+
+# ============================
+# LangChain 工具封装（@tool）
+# ============================
+@tool
+def web_search_tavily(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+    """
+    使用 Tavily 搜索的 LangChain 工具。
+
+    返回：统一的列表结构，包含 title/url/snippet。
+    """
+    # 使用 LangChain 社区工具封装，自动读取 TAVILY_API_KEY
+    from langchain_community.tools.tavily_search import TavilySearchResults
+
+    tool_impl = TavilySearchResults(max_results=max_results)
+    raw = tool_impl.invoke(query)
+
+    results: List[Dict[str, str]] = []
+    if isinstance(raw, list):
+        for r in raw:
+            # TavilySearchResults 通常返回 {"url", "content"}
+            results.append(
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "snippet": r.get("content", ""),
+                }
+            )
+    else:
+        # 兼容返回为字符串的情况
+        results.append({"title": "", "url": "", "snippet": str(raw)})
+    return results
+
+
+def create_search_agent_tavily() -> AgentExecutor:
+    """创建具备 Tavily 搜索工具的 AgentExecutor"""
+    llm = get_llm()
+    tools = [web_search_tavily]
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "你是信息检索助手。遇到需要实时/事实查询的问题时，优先调用 web_search_tavily 工具。返回时总结关键信息并附上来源URL。",
+            ),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ]
+    )
+
+    agent = create_tool_calling_agent(llm, tools, prompt)
+    return AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+
+# ============================
+# 入口逻辑（按环境变量自动选择模式）
+# ============================
+def main() -> None:
+    load_environment()
+
+    example_query = "LangChain 函数调用（Function Calling）教程"
+    fixed_input = "帮我检索 LangChain 的函数调用（Function Calling）核心要点，并附上来源链接。"
+
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+
+    if not tavily_key:
+        print("未检测到 TAVILY_API_KEY，请在 .env 中配置后重试。")
+        print("示例未执行。")
+        return
+
+    if openai_key:
+        print("===== LangChain Agent 固定示例（Tavily 工具）=====")
+        print(f"固定输入: {fixed_input}\n")
+        try:
+            agent = create_search_agent_tavily()
+            response = agent.invoke({"input": fixed_input, "agent_scratchpad": []})
+            print(f"AI: {response.get('output', '')}\n")
+        except Exception as e:
+            print(f"错误: {e}\n")
+    else:
+        print("===== Tavily 直接搜索模式 =====")
+        print(f"固定关键词: {example_query}\n")
+        try:
+            results = tavily_text_search(example_query, max_results=5)
+            if not results:
+                print("未找到结果。\n")
+            else:
+                print(f"共返回 {len(results)} 条：")
+                for i, r in enumerate(results, 1):
+                    print(f"[{i}] {r['title']}\n{r['url']}\n{r['snippet']}\n")
+        except Exception as e:
+            print(f"错误: {e}\n")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+要点：
+- 使用 `@tool` 装饰器暴露函数作为工具；参数类型注解与文档字符串用于自动生成“可调用 schema”。
+- 工具内部调用API接口，并返回明确的结构。
+
+
+<a id="tools-summary" data-alt="工具 模块 总结 结构 类型 对比 指南 最佳实践 策略 辅助"></a>
+## LangChain 工具模块总结
+
+### 核心工具类型与结构
+
+```
+Tools（工具封装）
+├── @tool（函数声明→自动生成参数 schema）
+├── Tool / StructuredTool（基础/结构化工具）
+└── ToolNode（LangGraph 节点化工具）
+
+Agent & 执行
+├── create_tool_calling_agent（构建具备工具调用能力的 Agent）
+├── AgentExecutor（统一执行/循环）
+└── ChatPromptTemplate + MessagesPlaceholder("agent_scratchpad")
+
+消息与调用轨迹
+├── tool_calls（模型产出的结构化调用）
+└── tool（消息，携带 tool_call_id 的工具结果）
+```
+
+### 工具类型功能对比
+
+| 工具类型 | 主要用途 | 校验性 | 状态/副作用 | 复杂度 | 适用场景 |
+|----------|----------|--------|--------------|--------|----------|
+| 简单函数工具（@tool） | 轻量计算/格式转换 | 低 | 无/很小 | 低 | 教程、快速原型 |
+| 结构化工具（StructuredTool/Pydantic） | 严格参数校验/复杂输入 | 高 | 取决于实现 | 中 | 生产接口、安全敏感 |
+| 外部 API 工具（HTTP/SDK） | 拉取实时数据/调用服务 | 中 | 外部副作用 | 中 | 天气、搜索、支付等 |
+| 数据读写工具（KV/DB/文件） | 会话状态/配置/缓存 | 中 | 有状态读写 | 中 | 记忆/工作流参数 |
+| 检索/RAG 工具（向量检索） | 语义召回知识 | 中 | 无 | 中 | FAQ、文档问答 |
+| 工作流节点（ToolNode） | LangGraph 节点化调用 | 高 | 依赖节点设计 | 中-高 | 复杂流程编排 |
+
+### 工具选择指南
+
+1. 仅需轻量计算/转换 → 使用 `@tool` 简单函数。
+2. 需要强校验与结构化输出 → 选用 `StructuredTool`/Pydantic 模型。
+3. 接入外部服务/API → 加上重试、限流、超时与幂等设计。
+4. 多工具协作/流程控制 → `AgentExecutor` 或 LangGraph + `ToolNode`。
+5. 可观测与调试 → 开启 `verbose=True`，记录 `tool_calls` 与工具输出。
+6. 安全与权限 → 输入白名单/范围校验，敏感操作封装，成本预算控制。
+7. 性能与并发 → 异步/批处理、缓存命中策略、降级与熔断。
+
+### 最佳实践
+
+- 名称与描述清晰：工具名用动宾结构，描述包含使用示例与限制。
+- 参数校验与错误边界：类型/范围/非法组合断言，错误信息明确可读。
+- 返回结构统一：使用字典固定键，便于 UI 与后续链条消费。
+- 提示词配套：在 system/human 中声明可用工具与使用范例；保留 `agent_scratchpad`。
+- 失败策略：兜底回复与降级路径，捕获异常避免中断会话。
+- 可测试性：为工具写单测与外部 API 的 mock；离线回放调用。
+
+### 策略与工具补充
+
+- 令牌预算与回路控制：限制最大调用轮次；提示词中约束“能一次解决勿多次调用”。
+- 重试与限流：用 `tenacity` 或客户端重试，指数退避；对 429/5xx 分类处理。
+- 缓存与幂等：查询类工具做缓存；写操作使用幂等键避免重复。
+- 安全与隔离：文件/网络沙箱，禁止危险路径/命令；开启审计日志。
+- 结构化输出与验证：Pydantic/JSON Schema 前后置验证，提高鲁棒性。
+- 可扩展与维护：工具分层（适配器/服务/工具），统一错误码与监控指标。
+
 
 <a id="qa" data-alt="常见错误 排查 缺少变量 参数错误 API 环境"></a>
 ## 常见错误与快速排查 (Q/A)
@@ -363,7 +642,7 @@ if __name__ == "__main__":
 <a id="links" data-alt="官方链接 源码 路径 文档"></a>
 ## 官方链接与源码
 
-- 完整代码：查看 [GitHub 仓库](https://github.com/kakaCat/langchain-learn/tree/04-memory/01_01_in_memory_history_demo.py)
+- 完整代码：查看 [GitHub 仓库](https://github.com/kakaCat/langchain-learn/blob/main/07-function_calling/01_chatbot_tools_demo.py)
 - 项目结构：参考仓库中的 `README.md`
 - LangChain 文档：https://python.langchain.com/
 - LangChain OpenAI 集成（Python API 索引）：https://api.python.langchain.com/
@@ -372,13 +651,32 @@ if __name__ == "__main__":
 <a id="summary" data-alt="总结 回顾 下一步"></a>
 ## 总结
 
-通过本教程，你已掌握：
-- 如何用 `@tool` 暴露函数为模型可调用的工具
-- 如何用 `create_tool_calling_agent`+`AgentExecutor` 构建具备工具调用能力的 Agent
-- 如何设计提示词结构并通过 `agent_scratchpad` 支持多轮工具调用
-- 如何在 CLI 中完成交互式工具调用与结果展示
+通过本教程，你已经系统掌握了 LangChain 的"函数调用/工具调用"能力与工程化落地方法。从"工具定义"到"Agent构建"再到"提示词设计"，形成了可在不同业务场景下组合使用的工具调用工具箱。
 
-下一步建议：接入真实 API（天气、翻译等），引入会话记忆/状态管理，设计多工具协作链路，面向生产环境完善缓存、限流与权限控制。
+## 能力清单
+- 工具定义与封装 ：使用 @tool 装饰器将普通函数转换为 LangChain 工具
+- Agent 构建 ：通过 create_tool_calling_agent 创建具备工具选择能力的智能体
+- 提示词设计 ：合理使用 MessagesPlaceholder('agent_scratchpad') 承载调用轨迹
+- 执行流程 ：通过 AgentExecutor 统一管理工具调用循环
+- 外部集成 ：集成 Tavily 等外部 API 服务获取实时数据
+## 选型建议
+- 简单计算任务 ：使用 @tool 装饰内部函数，强调简单与快速响应
+- 外部数据查询 ：集成 Tavily、DDGS 等搜索工具，强调实时性与准确性
+- 复杂业务流程 ：组合多个工具形成工作流，强调可靠性与错误处理
+- 生产环境 ：配置环境变量、错误边界、重试机制，强调稳定性
+## 工程要点
+- 工具设计 ：名称采用动宾结构，描述包含使用示例，参数做好校验
+- 提示词优化 ：在 system/human 中声明可用工具和使用范例，保留 agent_scratchpad
+- 错误处理 ：工具层做好参数校验，Agent 层做好调用容错
+- 性能优化 ：配置合理的超时、重试和并发控制
+- 观测调试 ：启用 verbose=True 观察调用轨迹，记录工具选择原因
+## 核心概念
+- 工具（Tool） ：开发者暴露给模型的"可调用函数"
+- 函数调用（Function Calling） ：模型在生成过程中提出"调用某函数"的意图
+- Agent ：作为决策器和调度器，负责工具的选择和调用
+- agent_scratchpad ：用于记录调用轨迹的中间记录区
+总之，函数调用并非"越复杂越好"，而是"恰到好处"：在功能丰富性、响应速度与维护成本之间平衡，按场景选择合适的工具组合。你可以从最简单的内部函数开始，逐步集成外部 API，最终构建适合生产的智能工具调用体系。
+
 
 <a id="glossary" data-alt="术语 别名 同义词 检索"></a>
 ## 术语与别名（便于检索与问法对齐）
