@@ -1,34 +1,48 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Module 7: REACT 模式代理实现（无记忆版本）
-演示如何在LangChain和LangGraph中实现无记忆的REACT（推理-行动-观察-思考）代理模式
+01_react_demo.py — LangChain v1 create_agent 版本（ReAct 风格）
 
-REACT模式是一种代理架构，包含以下核心组件：
-1. Reasoning（推理）：代理思考如何解决问题
-2. Action（行动）：代理执行动作（通常是调用工具）
-3. Observation（观察）：代理观察动作的结果
-4. 注意：此版本不包含会话记忆功能，每次对话都是独立的
+本示例使用 LangChain v1 的标准代理接口 `create_agent`，并展示经典的
+ReAct（先思考再行动）思路：模型在需要时调用工具、观察结果、继续推理，直到得到最终答案。
+
+依赖：
+- langchain>=1.0.0
+- langchain-core>=1.0.0
+- langchain-openai>=1.0.0
+- langgraph>=1.0.0（create_agent 基于 LangGraph，但你无需直接使用它）
+- openai>=1.0.0
+
+环境变量：
+- OPENAI_API_KEY 或者兼容的推理服务 API Key
+- OPENAI_BASE_URL（可选，若使用自托管或第三方兼容服务）
+- LC_AGENT_MODEL（优先使用），例如："openai:gpt-4o-mini"、"openai:gpt-4o"、"openai:gpt-4.1"
+- OPENAI_MODEL（作为兜底），例如同上
+
+运行：
+python 01_react_demo.py
 """
+
 import os
 import sys
-from typing import List, Any, Optional
+from typing import Optional
 from datetime import datetime
 
-# 确保中文显示正常
-sys.stdout.reconfigure(encoding='utf-8')
+try:
+    from dotenv import load_dotenv
+except Exception:
+    load_dotenv = None
 
-# 导入必要的库
-from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from langchain.agents import create_agent
 from langchain_core.tools import tool
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
-from dataclasses import dataclass
+from langchain_openai import ChatOpenAI
 
-# 从当前模块目录加载 .env
+
+from langchain_tavily import TavilySearch
+
+
+
 def load_environment():
-    """加载环境变量"""
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
 # 获取配置的语言模型
@@ -54,226 +68,90 @@ def get_llm() -> ChatOpenAI:
 
     return ChatOpenAI(**kwargs)
 
-# 定义工具
-@tool
-def calculator(a: float, b: float, operation: str) -> float:
-    """
-    用于执行基本数学计算的工具。
-    
-    参数:
-    a: 第一个数字
-    b: 第二个数字
-    operation: 操作类型，可以是 'add'(加), 'subtract'(减), 'multiply'(乘), 'divide'(除)
-    
-    返回:
-    计算结果
-    """
-    if operation == 'add':
-        return a + b
-    elif operation == 'subtract':
-        return a - b
-    elif operation == 'multiply':
-        return a * b
-    elif operation == 'divide':
-        if b == 0:
-            raise ValueError("除数不能为零")
-        return a / b
-    else:
-        raise ValueError(f"不支持的操作: {operation}")
 
-@tool
-def get_current_date(format: str = "%Y-%m-%d") -> str:
-    """
-    获取当前日期。
-    
-    参数:
-    format: 日期格式字符串，默认为 '%Y-%m-%d'(年-月-日)
-    
-    返回:
-    当前日期的字符串表示
-    """
-    return datetime.now().strftime(format)
 
-@tool
-def search_information(query: str) -> str:
-    """
-    用于搜索相关信息的工具。
-    
-    参数:
-    query: 搜索查询字符串
-    
-    返回:
-    搜索结果的文本描述
-    """
-    # 模拟搜索结果
-    mock_results = {
-        "langgraph": "LangGraph是一个用于构建代理工作流的框架，支持状态管理、条件路由和工具调用。",
-        "react模式": "REACT模式是一种代理架构，包含推理(Reasoning)、行动(Action)、观察(Observation)和思考(Think)四个步骤。",
-        "langchain": "LangChain是一个用于构建LLM应用的框架，提供了模型、提示、工具和内存等组件。"
-    }
-    
-    # 查找最匹配的结果
-    for key, value in mock_results.items():
-        if key in query.lower():
-            return value
-    
-    return f"未找到与 '{query}' 相关的信息。"
-
-# 定义状态类
-@dataclass
-class AgentState:
-    """定义REACT代理的状态类（无记忆版本）"""
-    messages: List[BaseMessage]
-    is_terminated: bool = False
-    reasoning: Optional[str] = None
-
-# REACT代理节点 - 推理阶段
-def reasoning_node(state: AgentState) -> AgentState:
-    """
-    REACT模式的推理阶段：分析问题，决定下一步行动
-    """
-    llm = get_llm()
-    tools = [calculator, get_current_date, search_information]
-    llm_with_tools = llm.bind_tools(tools)
-    
-    # 构造合法的上下文消息：
-    # 若存在 tool 消息，则必须确保其前面紧邻的是包含 tool_calls 的 assistant 消息；
-    # 若不存在这样的 assistant 消息，则移除悬空的 tool 消息，避免 OpenAI 400 错误。
-    messages = state.messages
-    last_ai_with_tools_idx = None
-    for idx in range(len(messages) - 1, -1, -1):
-        msg = messages[idx]
-        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", []):
-            last_ai_with_tools_idx = idx
-            break
-    
-    if any(isinstance(m, ToolMessage) for m in messages):
-        if last_ai_with_tools_idx is not None:
-            context_messages = messages[last_ai_with_tools_idx:]
+def get_tools():
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    try:
+        if tavily_key:
+            return [TavilySearch(max_results=3, tavily_api_key=tavily_key)]
         else:
-            # 移除所有悬空的 tool 消息
-            context_messages = [m for m in messages if not isinstance(m, ToolMessage)]
-    else:
-        context_messages = messages
-    
-    # 调用LLM进行推理
-    response = llm_with_tools.invoke(context_messages)
-    
-    # 更新状态
-    new_messages = state.messages.copy()
-    new_messages.append(response)
-    
-    # 检查是否需要终止
-    is_terminated = not hasattr(response, "tool_calls") or not response.tool_calls
-    
-    return AgentState(
-        messages=new_messages,
-        is_terminated=is_terminated,
-        reasoning="完成推理，决定下一步行动"
+            print("[提示] 未检测到 TAVILY_API_KEY，搜索工具将禁用。")
+            return []
+    except Exception as e:
+        print(f"[提示] Tavily 工具不可用：{e}")
+        return []
+
+
+def get_react_agent(system_prompt:str,tools:list) :
+
+    llm = get_llm()
+
+    return  create_agent(
+        model=llm,
+        tools=tools,
+        system_prompt=system_prompt
     )
 
-# 检查是否需要调用工具
-def check_tool_call(state: AgentState) -> str:
-    """检查是否需要调用工具"""
-    messages = state.messages
-    if not messages:
-        return "END"
-    
-    last_message = messages[-1]
-    
-    # 检查是否有工具调用
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-    
-    # 检查是否需要结束对话
-    if state.is_terminated:
-        return "END"
-    
-    # 无记忆版本，直接结束
-    return "END"
 
-# 创建REACT工作流
-def create_react_workflow():
-    """创建无记忆的REACT模式LangGraph工作流"""
-    # 初始化状态图
-    graph = StateGraph(AgentState)
-    
-    # 添加节点
-    graph.add_node("reasoning", reasoning_node)
-    graph.add_node("tools", ToolNode([calculator, get_current_date, search_information]))
-    
-    # 设置入口点
-    graph.set_entry_point("reasoning")
-    
-    # 添加条件边 - 检查是否需要调用工具
-    graph.add_conditional_edges(
-        "reasoning",
-        check_tool_call,
-        {
-            "tools": "tools",
-            "END": END
-        }
-    )
-    
-    # 添加边 - 工具调用后回到推理节点，形成REACT循环
-    graph.add_edge("tools", "reasoning")
-    
-    # 编译图（无记忆版本，不需要检查点）
-    app = graph.compile()
 
-    return app
 
-# 运行REACT代理
 def main():
-    """运行无记忆的REACT代理演示"""
-    # 加载环境变量
     load_environment()
-    
-    # 创建工作流
-    app = create_react_workflow()
-    
-    print("===== 无记忆REACT模式代理演示 ======")
-    print("这是一个基于REACT（推理-行动-观察-思考）模式的代理演示。")
-    print("注意：此版本不保存对话历史，每次对话都是独立的。")
-    print("你可以问问题，代理会通过推理决定是否需要使用工具来回答。")
-    print("示例问题：")
-    print("1. 今天是几号？")
-    print("2. 15乘以23等于多少？")
-    print("3. 什么是LangGraph？")
-    print("输入'退出'结束对话\n")
-    
-    while True:
-        try:
-            # 获取用户输入
-            user_input = input("你: ")
-            
-            # 检查是否退出
-            if user_input.lower() in ["退出", "exit", "quit", "q"]:
-                print("代理: 再见！")
-                break
-            
-            # 创建初始状态（无记忆版本，不需要session_id）
-            initial_state = AgentState(
-                messages=[HumanMessage(content=user_input)],
-                is_terminated=False
-            )
-            
-            # 执行工作流
-            final_state = app.invoke(initial_state)
-            
-            # 显示最终回复
-            if hasattr(final_state, 'messages') and final_state.messages:
-                # 查找最后一条AI消息作为回复
-                for message in reversed(final_state.messages):
-                    if isinstance(message, AIMessage) and not hasattr(message, 'tool_calls'):
-                        print(f"代理: {message.content}")
-                        break
-        except KeyboardInterrupt:
-            print("\n代理: 对话被中断，再见！")
-            break
-        except Exception as e:
-            print(f"代理: 发生错误: {str(e)}")
+    agent = get_react_agent(
+        system_prompt="You are a helpful research assistant.",
+        tools=get_tools()
+    )
 
-# 主函数
+    print("\n=== LangChain v1 create_agent · ReAct 示例 ===")
+
+    user_input = "2024年诺贝尔物理获奖者"
+    # 使用 v1 接口：传入 messages（role/content 对）
+    try:
+        result = agent.invoke({
+            "messages": [
+                {"role": "user", "content": user_input}
+            ]
+        })
+    except Exception as e:
+        print(f"助手发生错误: {e}")
+
+    messages = result.get("messages", [])
+    final_text = _extract_final_text_from_messages(messages)
+    if final_text:
+        print("助理:", final_text)
+    else:
+        print("[提示] 未从返回消息中提取到最终文本。完整结构如下：")
+        print(result)
+
+
+
+
+
+
+# 从返回的对话消息中提取最后一条助理文本
+def _extract_final_text_from_messages(messages) -> Optional[str]:
+    if not messages:
+        return None
+    last_assistant = None
+    for m in reversed(messages):
+        if isinstance(m, dict) and m.get("role") == "assistant":
+            last_assistant = m
+            break
+    msg = last_assistant or messages[-1]
+    content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                return block.get("text")
+        try:
+            return "\n".join(str(b) for b in content)
+        except Exception:
+            return None
+    return None
+
+
 if __name__ == "__main__":
     main()

@@ -1,373 +1,461 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Module 5: LLMCompiler 示例（将用户任务编译为可执行指令并执行）
+04_llm_compiler_demo.py — LangChain v1 create_agent 版本（LLM-Compiler 思路）
 
-简化版 LLMCompiler：
-- Compile：将用户任务编译为可执行的指令序列（program），每条包含 op 和 args
-- Execute：逐条执行指令，调度内置工具（无外部调用）并收集输出
-- Verify：评估最终答案是否满足用户意图，给出简短反馈
-- Finalize：输出清理后的最终答案
-
-特性：
-- 使用 LangGraph 管理工作流与状态
-- 无外部工具调用，部分操作使用 LLM（如 REWRITE/EXTRACT_POINTS）
-- CLI 交互，兼容 dict/数据类两种返回形态
+与 01/02/03 保持一致：统一工具、统一 CLI 与消息输出提取。
+本示例强调：先将问题“编译”为可执行子任务（要点式），再调用工具执行，最后合并答案。
 """
+import itertools
 import os
-import sys
-import json
-import ast
-import operator
-from typing import List, Optional, Dict, Any
-from dataclasses import dataclass, field
-
-# 终端中文输出
-sys.stdout.reconfigure(encoding='utf-8')
-
+import re
+import time
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langgraph.graph import StateGraph, END
 
-# 环境
+from concurrent.futures import ThreadPoolExecutor, wait
+from typing import Any, Dict, Iterable, List, Union, Sequence
+class Task(TypedDict):
+    idx: int
+    tool: Union[BaseTool, str]
+    args: Any
+    dependencies: List[int]
+
+class LLMCompilerPlanParser:
+    def __init__(self, tools: Sequence[BaseTool]):
+        self.tools = tools
+    def invoke(self, llm_output):
+        # Fallback: return no tasks to keep demo running without custom parser
+        return []
+    def stream(self, llm_output):
+        # Provide an empty iterator so upstream StopIteration is handled
+        return iter([])
+
+from langchain_core.prompts import ChatPromptTemplate
+from langchain import hub
+from langgraph.graph import END, StateGraph, START
+from langchain_core.runnables import RunnableBranch
+from langchain_core.runnables import as_runnable
+from langchain_core.tools import BaseTool
+from langchain_openai import ChatOpenAI
+from typing_extensions import TypedDict
+
+from langchain_core.messages import (
+    BaseMessage,
+    FunctionMessage,
+    HumanMessage,
+    SystemMessage,
+    AIMessage
+)
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langgraph.graph.message import add_messages
+from typing import Annotated
+from pydantic import BaseModel, Field
+
+
+
+class CalculatorTool(BaseTool):
+    name = "calculator"
+    description = "calculator(expression) - evaluate simple arithmetic expressions."
+
+    def _run(self, expression: str, run_manager=None):
+        try:
+            return str(eval(expression, {"__builtins__": {}}, {}))
+        except Exception as e:
+            return f"ERROR(Calculator failed: {e})"
+
+    async def _arun(self, expression: str, run_manager=None):
+        return self._run(expression)
+
 
 def load_environment():
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
-# 模型
-
 def get_llm() -> ChatOpenAI:
+
+    """创建并配置语言模型实例"""
     api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    model = os.getenv("OPENAI_MODEL", "deepseek-chat")
     base_url = os.getenv("OPENAI_BASE_URL")
     temperature = float(os.getenv("OPENAI_TEMPERATURE", "0"))
-    max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "768"))
-    return ChatOpenAI(
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        timeout=120,
-        max_retries=3,
-        request_timeout=120,
-        verbose=True,
+    max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "512"))
+    kwargs = {
+        "model": model,
+        "api_key": api_key,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "timeout": 120,
+        "max_retries": 3,
+        "request_timeout": 120,
+        "verbose": False,
+        "base_url": base_url
+    }
+
+    return ChatOpenAI(**kwargs)
+
+try:
+    search = TavilySearchResults(
+        max_results=1,
+        description='tavily_search_results_json(query="the search query") - a search engine.',
     )
+except Exception:
+    class DummySearch(BaseTool):
+        name = "tavily_search_results_json"
+        description = 'tavily_search_results_json(query="the search query") - a search engine.'
+        def _run(self, query: str, run_manager=None):
+            return f"Search unavailable (missing TAVILY_API_KEY). Query: {query}"
+        async def _arun(self, query: str, run_manager=None):
+            return self._run(query)
+    search = DummySearch()
 
-# 状态
+calculate = CalculatorTool()
 
-@dataclass
-class AgentState:
+# (removed example invocation)
+
+tools = [search, calculate]
+
+
+
+
+def _get_observations(messages: List[BaseMessage]) -> Dict[int, Any]:
+    # Get all previous tool responses
+    results = {}
+    for message in messages[::-1]:
+        if isinstance(message, FunctionMessage):
+            results[int(message.additional_kwargs["idx"])] = message.content
+    return results
+
+
+class SchedulerInput(TypedDict):
     messages: List[BaseMessage]
-    question: str
-    program: List[Dict[str, Any]] = field(default_factory=list)
-    outputs: List[str] = field(default_factory=list)
-    final_answer: Optional[str] = None
-    verified: bool = False
-    feedback: Optional[str] = None
-
-# ========= 工具集合（无外部调用） =========
-
-def tool_outline(topic: str) -> str:
-    topic = topic.strip() or "主题"
-    outline = [
-        f"一、{topic}的背景与目标",
-        f"二、{topic}的关键要点",
-        f"三、{topic}的步骤与实施",
-        f"四、注意事项与常见误区",
-        f"五、总结与下一步",
-    ]
-    return "\n".join(f"- {line}" for line in outline)
+    tasks: Iterable[Task]
 
 
-def tool_bullet(text: str) -> str:
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
-    bullets = [f"- {l}" for l in lines]
-    return "\n".join(bullets)
-
-
-def tool_rewrite(text: str, style: Optional[str] = None) -> str:
-    llm = get_llm()
-    prompt = (
-        "请将以下文本重写为更清晰、结构化、可执行的形式。\n"
-        f"目标风格：{style or '简洁、要点明确、条理清晰'}\n\n"
-        f"原文：\n{text}"
-    )
-    ai = llm.invoke([HumanMessage(content=prompt)])
-    return ai.content
-
-
-def tool_extract_points(text: str, n: int = 5) -> str:
-    llm = get_llm()
-    prompt = (
-        "请从以下文本中提炼关键要点，以列表形式输出，数量约为"
-        f"{n}，每条尽量简短。\n\n{text}"
-    )
-    ai = llm.invoke([HumanMessage(content=prompt)])
-    return ai.content
-
-# 简单安全计算器（仅支持 + - * / 和括号）
-_ALLOWED_BINOPS = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-    ast.Div: operator.truediv,
-}
-
-
-def _eval_expr(node):
-    if isinstance(node, ast.Expression):
-        return _eval_expr(node.body)
-    if isinstance(node, ast.Num):  # py<3.8
-        return node.n
-    if isinstance(node, ast.Constant):
-        if isinstance(node.value, (int, float)):
-            return node.value
-        raise ValueError("仅允许数字常量")
-    if isinstance(node, ast.BinOp):
-        left = _eval_expr(node.left)
-        right = _eval_expr(node.right)
-        op_type = type(node.op)
-        if op_type in _ALLOWED_BINOPS:
-            return _ALLOWED_BINOPS[op_type](left, right)
-        raise ValueError("不支持的运算符")
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-        return -_eval_expr(node.operand)
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.UAdd):
-        return +_eval_expr(node.operand)
-    if isinstance(node, ast.Call):
-        raise ValueError("不允许函数调用")
-    raise ValueError("不支持的表达式")
-
-
-def tool_calculate(expr: str) -> str:
+def _execute_task(task, observations, config):
+    tool_to_use = task["tool"]
+    if isinstance(tool_to_use, str):
+        return tool_to_use
+    args = task["args"]
     try:
-        node = ast.parse(expr, mode="eval")
-        value = _eval_expr(node)
-        return f"{expr} = {value}"
+        if isinstance(args, str):
+            resolved_args = _resolve_arg(args, observations)
+        elif isinstance(args, dict):
+            resolved_args = {
+                key: _resolve_arg(val, observations) for key, val in args.items()
+            }
+        else:
+            # This will likely fail
+            resolved_args = args
     except Exception as e:
-        return f"计算失败: {str(e)}"
-
-# ========= 编译、执行、评估节点 =========
-
-# Compile：将用户任务编译为 program（JSON 指令序列）
-
-def compile_node(state: AgentState) -> AgentState:
-    llm = get_llm()
-    prompt = (
-        "你是任务编译器。请将用户任务编译为可执行的指令序列(JSON)。\n"
-        "可用操作：\n"
-        "- OUTLINE: 生成主题的大纲，args: {\"topic\": string}\n"
-        "- BULLET: 将文本转为要点列表，args: {\"text\": string}\n"
-        "- REWRITE: 重写文本，args: {\"text\": string, \"style\": string?}\n"
-        "- EXTRACT_POINTS: 提炼要点，args: {\"text\": string, \"n\": number?}\n"
-        "- CALCULATE: 计算简单表达式，args: {\"expr\": string}\n\n"
-        "严格输出JSON：{\"program\": [{\"op\": string, \"args\": object}, ...]}。\n"
-        f"用户任务：{state.question}"
-    )
-    ai = llm.invoke([HumanMessage(content=prompt)])
-    content = ai.content
-
-    program: List[Dict[str, Any]] = []
+        return (
+            f"ERROR(Failed to call {tool_to_use.name} with args {args}.)"
+            f" Args could not be resolved. Error: {repr(e)}"
+        )
     try:
-        # 解析可能的代码块
-        text = content
-        if "```" in text:
-            parts = text.split("```")
-            # 找到可能的 JSON 片段
-            candidates = [p for p in parts if "program" in p and "{" in p]
-            if candidates:
-                text = candidates[0]
-        data = json.loads(text)
-        program = data.get("program", []) if isinstance(data, dict) else []
+        return tool_to_use.invoke(resolved_args, config)
+    except Exception as e:
+        return (
+            f"ERROR(Failed to call {tool_to_use.name} with args {args}."
+            + f" Args resolved to {resolved_args}. Error: {repr(e)})"
+        )
+
+
+def _resolve_arg(arg: Union[str, Any], observations: Dict[int, Any]):
+    # $1 or ${1} -> 1
+    ID_PATTERN = r"\$\{?(\d+)\}?"
+
+    def replace_match(match):
+        # If the string is ${123}, match.group(0) is ${123}, and match.group(1) is 123.
+
+        # Return the match group, in this case the index, from the string. This is the index
+        # number we get back.
+        idx = int(match.group(1))
+        return str(observations.get(idx, match.group(0)))
+
+    # For dependencies on other tasks
+    if isinstance(arg, str):
+        return re.sub(ID_PATTERN, replace_match, arg)
+    elif isinstance(arg, list):
+        return [_resolve_arg(a, observations) for a in arg]
+    else:
+        return str(arg)
+
+
+@as_runnable
+def schedule_task(task_inputs, config):
+    task: Task = task_inputs["task"]
+    observations: Dict[int, Any] = task_inputs["observations"]
+    try:
+        observation = _execute_task(task, observations, config)
     except Exception:
-        # 兜底：构造一个简单的 REWRITE 指令
-        program = [{"op": "REWRITE", "args": {"text": state.question, "style": "结构化、要点清晰"}}]
+        import traceback
 
-    new_messages = state.messages.copy()
-    new_messages.append(AIMessage(content=f"Compile 阶段：\n{json.dumps({"program": program}, ensure_ascii=False, indent=2)}"))
+        observation = traceback.format_exception()  # repr(e) +
+    observations[task["idx"]] = observation
 
-    return AgentState(
-        messages=new_messages,
-        question=state.question,
-        program=program,
-        outputs=[],
-        final_answer=None,
-        verified=False,
-        feedback=None,
-    )
 
-# Execute：执行 program
+def schedule_pending_task(
+    task: Task, observations: Dict[int, Any], retry_after: float = 0.2
+):
+    while True:
+        deps = task["dependencies"]
+        if deps and (any([dep not in observations for dep in deps])):
+            # Dependencies not yet satisfied
+            time.sleep(retry_after)
+            continue
+        schedule_task.invoke({"task": task, "observations": observations})
+        break
 
-def execute_node(state: AgentState) -> AgentState:
-    outputs: List[str] = []
-    for instr in state.program:
-        op = str(instr.get("op", "")).upper()
-        args = instr.get("args", {}) or {}
-        try:
-            if op == "OUTLINE":
-                res = tool_outline(str(args.get("topic", state.question)))
-            elif op == "BULLET":
-                res = tool_bullet(str(args.get("text", state.question)))
-            elif op == "REWRITE":
-                res = tool_rewrite(str(args.get("text", state.question)), style=args.get("style"))
-            elif op == "EXTRACT_POINTS":
-                res = tool_extract_points(str(args.get("text", state.question)), int(args.get("n", 5)))
-            elif op == "CALCULATE":
-                res = tool_calculate(str(args.get("expr", "0")))
+
+@as_runnable
+def schedule_tasks(scheduler_input: SchedulerInput) -> List[FunctionMessage]:
+    """Group the tasks into a DAG schedule."""
+    # For streaming, we are making a few simplifying assumption:
+    # 1. The LLM does not create cyclic dependencies
+    # 2. That the LLM will not generate tasks with future deps
+    # If this ceases to be a good assumption, you can either
+    # adjust to do a proper topological sort (not-stream)
+    # or use a more complicated data structure
+    tasks = scheduler_input["tasks"]
+    args_for_tasks = {}
+    messages = scheduler_input["messages"]
+    # If we are re-planning, we may have calls that depend on previous
+    # plans. Start with those.
+    observations = _get_observations(messages)
+    task_names = {}
+    originals = set(observations)
+    # ^^ We assume each task inserts a different key above to
+    # avoid race conditions...
+    futures = []
+    retry_after = 0.25  # Retry every quarter second
+    with ThreadPoolExecutor() as executor:
+        for task in tasks:
+            deps = task["dependencies"]
+            task_names[task["idx"]] = (
+                task["tool"] if isinstance(task["tool"], str) else task["tool"].name
+            )
+            args_for_tasks[task["idx"]] = task["args"]
+            if (
+                # Depends on other tasks
+                deps and (any([dep not in observations for dep in deps]))
+            ):
+                futures.append(
+                    executor.submit(
+                        schedule_pending_task, task, observations, retry_after
+                    )
+                )
             else:
-                res = f"未知操作: {op}"
-        except Exception as e:
-            res = f"指令执行失败({op}): {str(e)}"
-        outputs.append(f"[{op}]\n{res}")
+                # No deps or all deps satisfied
+                # can schedule now
+                schedule_task.invoke(dict(task=task, observations=observations))
+                # futures.append(executor.submit(schedule_task.invoke, dict(task=task, observations=observations)))
 
-    final_answer = assemble_final_answer_from_outputs(outputs)
+        # All tasks have been submitted or enqueued
+        # Wait for them to complete
+        wait(futures)
+    # Convert observations to new tool messages to add to the state
+    new_observations = {
+        k: (task_names[k], args_for_tasks[k], observations[k])
+        for k in sorted(observations.keys() - originals)
+    }
+    tool_messages = [
+        FunctionMessage(
+            name=name,
+            content=str(obs),
+            additional_kwargs={"idx": k, "args": task_args},
+            tool_call_id=k,
+        )
+        for k, (name, task_args, obs) in new_observations.items()
+    ]
+    return tool_messages
 
-    new_messages = state.messages.copy()
-    new_messages.append(AIMessage(content=f"Execute 阶段：已执行 {len(state.program)} 条指令。"))
-    new_messages.append(AIMessage(content=f"执行结果汇总：\n{final_answer}"))
 
-    return AgentState(
-        messages=new_messages,
-        question=state.question,
-        program=state.program,
-        outputs=outputs,
-        final_answer=final_answer,
-        verified=False,
-        feedback=None,
+@as_runnable
+def plan_and_schedule(state):
+    messages = state["messages"]
+    tasks = get_planner().stream(messages)
+    # Begin executing the planner immediately
+    try:
+        tasks = itertools.chain([next(tasks)], tasks)
+    except StopIteration:
+        # Handle the case where tasks is empty.
+        tasks = iter([])
+    scheduled_tasks = schedule_tasks.invoke(
+        {
+            "messages": messages,
+            "tasks": tasks,
+        }
+    )
+    return {"messages": scheduled_tasks}
+
+
+
+
+class FinalResponse(BaseModel):
+    """The final response/answer."""
+
+    response: str
+
+
+class Replan(BaseModel):
+    feedback: str = Field(
+        description="Analysis of the previous attempts and recommendations on what needs to be fixed."
     )
 
-# Verify：评估最终答案是否满足用户意图
 
-def verify_node(state: AgentState) -> AgentState:
-    llm = get_llm()
-    prompt = (
-        "你是评估器。判断最终答案是否满足用户意图，给出简短反馈。\n"
-        "严格输出：\n"
-        "结论: 满足 或 不满足\n"
-        "理由: <一句话>\n\n"
-        f"用户任务：{state.question}\n\n"
-        f"最终答案：\n{state.final_answer or ''}"
+class JoinOutputs(BaseModel):
+    """Decide whether to replan or whether you can return the final response."""
+
+    thought: str = Field(
+        description="The chain of thought reasoning for the selected action"
     )
-    ai = llm.invoke([HumanMessage(content=prompt)])
-    feedback = ai.content
-    verified = ("满足" in feedback) and ("不满足" not in feedback)
+    action: Union[FinalResponse, Replan]
 
-    new_messages = state.messages.copy()
-    new_messages.append(AIMessage(content=f"Verify 阶段：\n{feedback}"))
 
-    return AgentState(
-        messages=new_messages,
-        question=state.question,
-        program=state.program,
-        outputs=state.outputs,
-        final_answer=state.final_answer,
-        verified=verified,
-        feedback=feedback,
+joiner_prompt = hub.pull("wfh/llm-compiler-joiner").partial(
+    examples=""
+)  # You can optionally add examples
+llm = ChatOpenAI(model="gpt-4o")
+
+runnable = joiner_prompt | llm.with_structured_output(
+    JoinOutputs, method="function_calling"
+)
+
+# (duplicate block removed)
+
+def get_planner():
+    base_prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are a planning assistant. {replan}\nAvailable tools ({num_tools}):\n{tool_descriptions}"
+        ),
+        ("placeholder", "{messages}")
+    ])
+    tool_descriptions = "\n".join(
+        f"{i + 1}. {tool.description}\n" for i, tool in enumerate(tools)
+    )
+    planner_prompt = base_prompt.partial(
+        replan="",
+        num_tools=len(tools) + 1,
+        tool_descriptions=tool_descriptions,
+    )
+    replanner_prompt = base_prompt.partial(
+        replan=(' - You are given "Previous Plan" which is the plan that the previous agent created along with the execution results '
+                "(given as Observation) of each plan and a general thought (given as Thought) about the executed results."
+                'You MUST use these information to create the next plan under "Current Plan".\n'
+                ' - When starting the Current Plan, you should start with "Thought" that outlines the strategy for the next plan.\n'
+                " - In the Current Plan, you should NEVER repeat the actions that are already executed in the Previous Plan.\n"
+                " - You must continue the task index from the end of the previous one. Do not repeat task indices."),
+        num_tools=len(tools) + 1,
+        tool_descriptions=tool_descriptions,
+    )
+    return (
+        RunnableBranch(
+            (should_replan, wrap_and_get_last_index | replanner_prompt),
+            wrap_messages | planner_prompt,
+        )
+        | get_llm()
+        | LLMCompilerPlanParser(tools=tools)
     )
 
-# Finalize：输出最终答案（可做一次清理）
+def should_replan(state: list):
+        # Context is passed as a system message
+        return isinstance(state[-1], SystemMessage)
 
-def finalize_node(state: AgentState) -> AgentState:
-    # 可选：用一次 REWRITE 清理格式
-    cleaned = tool_rewrite(state.final_answer or assemble_final_answer_from_outputs(state.outputs), style="简洁、条理清晰")
-    new_messages = state.messages.copy()
-    new_messages.append(AIMessage(content=f"最终答案：\n{cleaned}"))
-    return AgentState(
-        messages=new_messages,
-        question=state.question,
-        program=state.program,
-        outputs=state.outputs,
-        final_answer=cleaned,
-        verified=state.verified,
-        feedback=state.feedback,
+def wrap_messages(state: list):
+    return {"messages": state}
+
+def wrap_and_get_last_index(state: list):
+    next_task = 0
+    for message in state[::-1]:
+        if isinstance(message, FunctionMessage):
+            next_task = message.additional_kwargs["idx"] + 1
+            break
+    state[-1].content = state[-1].content + f" - Begin counting at : {next_task}"
+    return {"messages": state}
+
+def _parse_joiner_output(decision: JoinOutputs) -> List[BaseMessage]:
+    response = [AIMessage(content=f"Thought: {decision.thought}")]
+    if isinstance(decision.action, Replan):
+        return {
+            "messages": response
+            + [
+                SystemMessage(
+                    content=f"Context from last attempt: {decision.action.feedback}"
+                )
+            ]
+        }
+    else:
+        return {"messages": response + [AIMessage(content=decision.action.response)]}
+
+
+def select_recent_messages(state) -> dict:
+    messages = state["messages"]
+    selected = []
+    for msg in messages[::-1]:
+        selected.append(msg)
+        if isinstance(msg, HumanMessage):
+            break
+    return {"messages": selected[::-1]}
+
+
+def get_joiner():
+    return select_recent_messages | runnable | _parse_joiner_output
+
+def should_continue(state):
+    messages = state["messages"]
+    if isinstance(messages[-1], AIMessage):
+        return END
+    return "plan_and_schedule"
+
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+
+
+def create_workflow():
+
+    workflow = StateGraph(State)
+
+    # 1.  Define vertices
+    # We defined plan_and_schedule above already
+    # Assign each node to a state variable to update
+    workflow.add_node("plan_and_schedule", plan_and_schedule)
+    workflow.add_node("join", get_joiner())
+
+
+    ## Define edges
+    workflow.add_edge("plan_and_schedule", "join")
+
+    ### This condition determines looping logic
+
+    workflow.add_conditional_edges(
+        "join",
+        # Next, we pass in the function that will determine which node is called next.
+        should_continue,
     )
-
-# 汇总输出
-
-def assemble_final_answer_from_outputs(outputs: List[str]) -> str:
-    parts = []
-    for i, out in enumerate(outputs, start=1):
-        parts.append(f"步骤 {i}:\n{out}")
-    return "\n\n".join(parts)
-
-# 路由
-
-def after_compile(state: AgentState) -> str:
-    return "execute"
-
-def after_execute(state: AgentState) -> str:
-    return "verify"
-
-def after_verify(state: AgentState) -> str:
-    return "finalize"
-
-# 构建工作流
-
-def create_llmcompiler_workflow():
-    graph = StateGraph(AgentState)
-    graph.add_node("compile", compile_node)
-    graph.add_node("execute", execute_node)
-    graph.add_node("verify", verify_node)
-    graph.add_node("finalize", finalize_node)
-
-    graph.set_entry_point("compile")
-
-    graph.add_conditional_edges("compile", after_compile, {"execute": "execute"})
-    graph.add_conditional_edges("execute", after_execute, {"verify": "verify"})
-    graph.add_conditional_edges("verify", after_verify, {"finalize": "finalize"})
-
-    graph.add_edge("finalize", END)
-
-    app = graph.compile()
+    workflow.add_edge(START, "plan_and_schedule")
+    app = workflow.compile()
+    app.get_graph().draw_mermaid_png(output_file_path='blog/flow_01.png')
     return app
 
-# CLI
-
-def main():
+def main() -> None:
     load_environment()
-    app = create_llmcompiler_workflow()
+    """运行工作流并输出最终结果"""
+    app = create_workflow()
 
-    print("===== LLMCompiler 演示 ======")
-    print("该代理会：Compile（编译任务）→ Execute（执行指令）→ Verify（评估）→ Finalize（输出最终答案）。")
-    print("每次对话独立，部分指令使用 LLM 重写/提炼，无外部工具。输入 '退出' 结束对话。\n")
-    print("示例任务（适合 LLMCompiler 的场景）：")
-    print("1. 将下段文字整理为要点并做一个三层大纲：<你的文本>")
-    print("2. 计算表达式并将结果放入总结：表达式 3*(5+2)-8，然后整理结论")
-    print("3. 提炼这段文字的5条要点，并重写为行动清单：<你的文本>\n")
-
-    while True:
-        try:
-            user_input = input("你: ")
-            if user_input.lower() in ["退出", "exit", "quit", "q"]:
-                print("代理: 再见！")
-                break
-
-            init_state = AgentState(
-                messages=[HumanMessage(content=user_input)],
-                question=user_input,
-            )
-            final_state = app.invoke(init_state)
-
-            # 获取消息列表（兼容 dict / 数据类）
-            messages = []
-            if isinstance(final_state, dict):
-                messages = final_state.get("messages", [])
-            else:
-                messages = getattr(final_state, "messages", [])
-
-            # 输出最后一个 AI 回复（最终答案）
-            for msg in reversed(messages):
-                if isinstance(msg, AIMessage):
-                    print(f"代理: {msg.content}")
-                    break
-            else:
-                print("代理: 对不起，未能生成答案。")
-        except KeyboardInterrupt:
-            print("\n代理: 对话被中断，再见！")
-            break
-        except Exception as e:
-            print(f"代理: 发生错误: {str(e)}")
+    for step in app.stream(
+        {
+            "messages": [
+                HumanMessage(
+                    content="Find the current temperature in Tokyo, then, respond with a flashcard summarizing this information"
+                )
+            ]
+        }
+    ):
+        print(step)
+    # # 初始化状态：仅需提供用户输入，其余字段由工作流填充
+    # initial_state = {"input": "用一句话解释 Plan-and-Solve 是什么？"}
+    # final_state = app.invoke(initial_state)
+    # print("Response:", step)
 
 if __name__ == "__main__":
     main()

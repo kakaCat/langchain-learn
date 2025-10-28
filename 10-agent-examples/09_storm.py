@@ -1,35 +1,49 @@
 """
-STORM (Synthesis of Thought with Observation and Reflection for Multi-step reasoning) 模式示例
+STORM（Synthesis of Topic Outlines through Retrieval and Multi-perspective Question Asking）长文写作示例
 
-STORM 模式特点：
-- 结合思考、观察和反思的多步推理
-- 适用于复杂问题的分解和解决
-- 通过反思步骤优化推理过程
-- 支持多轮迭代推理
+借鉴论文与实践总结（参考知乎文章）实现：
+- 视角发现：发现不同写作视角（基本事实、历史、应用等）
+- 多轮提问：每个视角生成多轮高价值问题
+- 检索与整合：用简易搜索检索并总结成可信信息
+- 大纲合成：根据主题与对话信息生成结构化大纲
+- 章节写作：按大纲写作并引用来源
+
+说明：
+- 无外部搜索 API 时，使用 DuckDuckGo 轻量搜索（如不可用则降级模拟）
+- 无 LLM API Key 时，降级为规则式/占位写作，保证可运行
 """
 
 import os
 from typing import List, Dict, Any, Optional
-from langchain_core.messages import HumanMessage, AIMessage
+from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
-from pydantic import BaseModel, Field
-from dataclasses import dataclass
-from dotenv import load_dotenv
 
-# 从当前模块目录加载 .env
+# =========================
+# 环境与模型
+# =========================
+
 def load_environment():
-    """加载环境变量"""
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    """加载 .env 环境变量（就近目录）。"""
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=False)
+    else:
+        load_dotenv(override=False)
 
-# 获取配置的语言模型
-def get_llm() -> ChatOpenAI:
-    """创建并配置语言模型实例"""
+
+def get_llm() -> Optional[ChatOpenAI]:
+    """创建并配置语言模型实例；无 key 时返回 None 以触发降级模式。"""
     api_key = os.getenv("OPENAI_API_KEY")
     model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
     base_url = os.getenv("OPENAI_BASE_URL")
-    temperature = float(os.getenv("OPENAI_TEMPERATURE", "0"))
-    max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "512"))
+    temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.3"))
+    max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "1024"))
+
+    if not api_key:
+        return None
 
     kwargs = {
         "model": model,
@@ -39,184 +53,299 @@ def get_llm() -> ChatOpenAI:
         "timeout": 120,
         "max_retries": 3,
         "request_timeout": 120,
-        "verbose": True,
-        "base_url": base_url
+        "base_url": base_url,
     }
-
-    return ChatOpenAI(**kwargs)
-
-class StormState(BaseModel):
-    """STORM 模式的状态定义"""
-    question: str = Field(description="用户问题")
-    thoughts: List[str] = Field(default_factory=list, description="思考步骤")
-    observations: List[str] = Field(default_factory=list, description="观察结果")
-    reflections: List[str] = Field(default_factory=list, description="反思内容")
-    final_answer: Optional[str] = Field(default=None, description="最终答案")
+    try:
+        return ChatOpenAI(**kwargs)
+    except Exception:
+        return None
 
 
+# =========================
+# 轻量检索（DuckDuckGo）
+# =========================
+
+def ddg_search(query: str, k: int = 5) -> List[Dict[str, str]]:
+    """使用 duckduckgo_search 进行轻量检索；不可用时返回占位结果。
+    返回项包含 title / link / snippet。
+    """
+    try:
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = []
+            for r in ddgs.text(query, max_results=k):
+                results.append({
+                    "title": r.get("title") or "",
+                    "link": r.get("href") or r.get("link") or "",
+                    "snippet": r.get("body") or r.get("snippet") or "",
+                })
+            return results
+    except Exception:
+        # 降级占位：避免运行时失败
+        return [{
+            "title": "占位搜索结果",
+            "link": "https://example.com",
+            "snippet": f"无法使用实时搜索。这里是关于‘{query}’的占位信息。",
+        }]
 
 
+# =========================
+# 数据结构
+# =========================
 
-def thought_node(state: StormState) -> StormState:
-    """思考节点 - 分析问题并生成思考步骤"""
-    agent = get_llm()
-    
-    if not agent:
-        # 模拟模式
-        if len(state.thoughts) == 0:
-            state.thoughts.append("分析问题结构，识别关键要素")
-        elif len(state.thoughts) == 1:
-            state.thoughts.append("分解问题为可管理的子问题")
+class QAItem(BaseModel):
+    perspective: str = Field(description="视角名称")
+    question: str = Field(description="问题")
+    answer: Optional[str] = Field(default=None, description="答案/总结")
+    sources: List[str] = Field(default_factory=list, description="信息来源链接")
+
+
+class StormWriteState(BaseModel):
+    """STORM 写作状态"""
+    topic: str = Field(description="写作主题")
+    perspectives: List[str] = Field(default_factory=list, description="写作视角集合")
+    qa: List[QAItem] = Field(default_factory=list, description="多视角问答集合")
+    outline: List[str] = Field(default_factory=list, description="文章大纲（章节标题）")
+    article: Optional[str] = Field(default=None, description="最终文章内容")
+    iteration: int = Field(default=0, description="多轮对话轮次计数")
+
+
+# =========================
+# 节点实现
+# =========================
+
+def discover_perspectives_node(state: StormWriteState) -> StormWriteState:
+    """视角发现：基于主题提出 3-5 个多维视角。"""
+    llm = get_llm()
+    if llm is None:
+        # 降级默认视角
+        state.perspectives = ["基本事实", "历史脉络", "关键应用", "挑战与争议", "未来趋势"]
+        return state
+
+    prompt = f"""
+你是一名资深百科写作者。请针对主题《{state.topic}》提出 4-6 个互补的写作视角。
+要求：
+- 覆盖：基本事实、历史/演进、应用/影响、挑战/争议、未来/趋势 等维度
+- 输出：用逗号分隔的短语列表，不要解释
+"""
+    resp = llm.invoke([HumanMessage(content=prompt)])
+    raw = resp.content.strip()
+    perspectives = [p.strip() for p in raw.replace("，", ",").split(",") if p.strip()]
+    # 去重与裁剪
+    seen = set()
+    clean = []
+    for p in perspectives:
+        if p not in seen:
+            clean.append(p)
+            seen.add(p)
+        if len(clean) >= 6:
+            break
+    state.perspectives = clean or ["基本事实", "历史脉络", "关键应用", "挑战与争议", "未来趋势"]
+    return state
+
+
+def questioning_node(state: StormWriteState) -> StormWriteState:
+    """多轮提问：每个视角生成 2 条高价值问题。"""
+    llm = get_llm()
+    if llm is None:
+        # 降级直接生成模板问题
+        for p in state.perspectives:
+            state.qa.append(QAItem(perspective=p, question=f"关于‘{p}’的关键事实是什么？"))
+            state.qa.append(QAItem(perspective=p, question=f"在‘{p}’下最重要的案例/证据有哪些？"))
+        state.iteration += 1
+        return state
+
+    prompt = f"""
+主题：{state.topic}
+视角：{state.perspectives}
+请为每个视角生成两条高价值问题（简短精炼，便于检索），仅输出按视角分组的问题清单：
+- 输出格式示例：
+基本事实：问题A；问题B
+历史脉络：问题C；问题D
+"""
+    resp = llm.invoke([HumanMessage(content=prompt)])
+    lines = [ln.strip() for ln in resp.content.splitlines() if ln.strip()]
+    for ln in lines:
+        if "：" in ln:
+            k, v = ln.split("：", 1)
+            questions = [q.strip() for q in v.replace("；", ";").split(";") if q.strip()]
+            for q in questions[:2]:
+                state.qa.append(QAItem(perspective=k.strip(), question=q))
+    state.iteration += 1
+    return state
+
+
+def retrieve_node(state: StormWriteState) -> StormWriteState:
+    """检索并总结：对尚未回答的问题进行轻量检索并总结为答案。"""
+    llm = get_llm()
+    # 找到未回答的问题
+    pending = [item for item in state.qa if not item.answer]
+    for item in pending:
+        results = ddg_search(f"{state.topic} {item.question}", k=4)
+        sources = [r.get("link", "") for r in results if r.get("link")]
+        snippets = [r.get("snippet", "") for r in results if r.get("snippet")]
+        item.sources = sources
+        if llm is None:
+            # 降级总结：拼接摘要片段
+            summary = "；".join(snippets) or f"基于公开资料，对问题‘{item.question}’进行占位总结。"
+            item.answer = summary[:800]
         else:
-            state.thoughts.append("整合信息，形成推理路径")
-        return state
-    
-    # 实际 LLM 调用
-    prompt = f"""
-    问题: {state.question}
-    
-    当前思考步骤: {state.thoughts}
-    当前观察: {state.observations}
-    当前反思: {state.reflections}
-    
-    请生成下一步的思考内容，帮助解决这个问题。
-    """
-    
-    response = agent.invoke([HumanMessage(content=prompt)])
-    state.thoughts.append(response.content)
+            prompt = f"""
+你是信息整合助手。请基于以下检索摘要，针对问题生成简洁、可信的回答，并在结尾列出参考链接：
+问题：{item.question}
+摘要：{snippets}
+"""
+            resp = llm.invoke([HumanMessage(content=prompt)])
+            item.answer = resp.content.strip()
+            # 若回答未包含链接，追加来源
+            if item.sources and ("http" not in item.answer):
+                item.answer += "\n参考：" + " | ".join(item.sources[:3])
     return state
 
 
-def observation_node(state: StormState) -> StormState:
-    """观察节点 - 基于思考生成观察结果"""
-    agent = get_llm()
-    
-    if not agent:
-        # 模拟模式
-        current_thought = state.thoughts[-1] if state.thoughts else "初始思考"
-        state.observations.append(f"基于思考 '{current_thought}' 的观察结果")
+def outline_node(state: StormWriteState) -> StormWriteState:
+    """大纲合成：根据主题与多视角问答生成结构化大纲。"""
+    llm = get_llm()
+    qa_view = [f"[{q.perspective}] {q.question} -> {q.answer[:120] if q.answer else ''}" for q in state.qa]
+    if llm is None:
+        # 降级固定大纲
+        state.outline = [
+            "引言：主题背景与重要性",
+            "基本概念与核心事实",
+            "历史演进与关键节点",
+            "代表性应用与影响",
+            "挑战、争议与风险",
+            "未来发展趋势与展望",
+            "结论与参考资料"
+        ]
         return state
-    
+
     prompt = f"""
-    问题: {state.question}
-    最新思考: {state.thoughts[-1] if state.thoughts else '无'}
-    
-    请基于这个思考，生成具体的观察结果。
-    """
-    
-    response = agent.invoke([HumanMessage(content=prompt)])
-    state.observations.append(response.content)
+请基于主题《{state.topic}》以及下列多视角问答，合成 6-8 条结构化大纲条目（仅输出章节标题列表，每行一条，不要解释）。
+问答摘要：{qa_view}
+"""
+    resp = llm.invoke([HumanMessage(content=prompt)])
+    lines = [ln.strip("- • ").strip() for ln in resp.content.splitlines() if ln.strip()]
+    # 去重
+    seen = set()
+    outline = []
+    for ln in lines:
+        if ln and ln not in seen:
+            outline.append(ln)
+            seen.add(ln)
+        if len(outline) >= 8:
+            break
+    state.outline = outline or [
+        "引言：主题背景与重要性",
+        "基本概念与核心事实",
+        "历史演进与关键节点",
+        "代表性应用与影响",
+        "挑战、争议与风险",
+        "未来发展趋势与展望",
+        "结论与参考资料"
+    ]
     return state
 
 
-def reflection_node(state: StormState) -> StormState:
-    """反思节点 - 评估当前进展并优化推理"""
-    agent = get_llm()
-    
-    if not agent:
-        # 模拟模式
-        state.reflections.append("评估当前推理进展，识别可能的改进方向")
+def writing_node(state: StormWriteState) -> StormWriteState:
+    """章节写作：按大纲生成带引用的文章。"""
+    llm = get_llm()
+    qa_context = "\n".join([f"[{q.perspective}] Q: {q.question}\nA: {q.answer}" for q in state.qa])
+    outline = state.outline or ["引言", "正文", "结论"]
+
+    if llm is None:
+        # 降级写作：模板化拼接
+        sections = []
+        for sec in outline:
+            sections.append(f"## {sec}\n\n基于对主题与公开资料的综合，本文就‘{sec}’进行占位性论述。\n")
+        refs = []
+        for q in state.qa:
+            refs.extend(q.sources)
+        refs = list(dict.fromkeys(refs))
+        state.article = "\n".join(sections) + ("\n参考资料:\n" + "\n".join(refs[:10]) if refs else "")
         return state
-    
+
     prompt = f"""
-    问题: {state.question}
-    所有思考: {state.thoughts}
-    所有观察: {state.observations}
-    
-    请反思当前的推理过程，提出改进建议或识别潜在问题。
-    """
-    
-    response = agent.invoke([HumanMessage(content=prompt)])
-    state.reflections.append(response.content)
+你是一名维基百科风格的写作者。请基于大纲与多视角问答，撰写结构化的长文草稿：
+- 文风客观、清晰，避免主观形容
+- 每个大纲段落 2-4 段
+- 在适当位置引用参考链接（可使用括号形式）
+
+主题：{state.topic}
+大纲：{outline}
+问答上下文：\n{qa_context}
+只输出文章正文，不要额外说明。
+"""
+    resp = llm.invoke([HumanMessage(content=prompt)])
+    state.article = resp.content.strip()
     return state
 
 
-def decision_node(state: StormState) -> str:
-    """决策节点 - 决定是否继续推理或结束"""
-    if len(state.thoughts) >= 3:
-        return "end"
-    return "continue"
+# =========================
+# 决策与工作流
+# =========================
 
-
-def final_answer_node(state: StormState) -> StormState:
-    """最终答案节点 - 生成最终答案"""
-    agent = get_llm()
-    
-    if not agent:
-        # 模拟模式
-        state.final_answer = f"基于 {len(state.thoughts)} 步思考、{len(state.observations)} 次观察和 {len(state.reflections)} 次反思，得出最终答案"
-        return state
-    
-    prompt = f"""
-    问题: {state.question}
-    思考过程: {state.thoughts}
-    观察结果: {state.observations}
-    反思内容: {state.reflections}
-    
-    请基于以上信息，给出最终答案。
-    """
-    
-    response = agent.invoke([HumanMessage(content=prompt)])
-    state.final_answer = response.content
-    return state
+def decision_after_retrieve(state: StormWriteState) -> str:
+    """是否继续新一轮提问检索；限制 2 轮。"""
+    if state.iteration >= 2:
+        return "outline"
+    return "question"
 
 
 def create_storm_workflow():
-    """创建 STORM 工作流"""
-    workflow = StateGraph(StormState)
-    
-    # 添加节点
-    workflow.add_node("thought", thought_node)
-    workflow.add_node("observation", observation_node)
-    workflow.add_node("reflection", reflection_node)
-    workflow.add_node("final_answer", final_answer_node)
-    
-    # 设置入口点
-    workflow.set_entry_point("thought")
-    
-    # 添加边
-    workflow.add_edge("thought", "observation")
-    workflow.add_edge("observation", "reflection")
+    """创建 STORM 写作工作流。"""
+    workflow = StateGraph(StormWriteState)
+
+    workflow.add_node("discover", discover_perspectives_node)
+    workflow.add_node("question", questioning_node)
+    workflow.add_node("retrieve", retrieve_node)
+    workflow.add_node("outline", outline_node)
+    workflow.add_node("write", writing_node)
+
+    workflow.set_entry_point("discover")
+
+    workflow.add_edge("discover", "question")
+    workflow.add_edge("question", "retrieve")
     workflow.add_conditional_edges(
-        "reflection",
-        decision_node,
+        "retrieve",
+        decision_after_retrieve,
         {
-            "continue": "thought",
-            "end": "final_answer"
-        }
+            "question": "question",
+            "outline": "outline",
+        },
     )
-    workflow.add_edge("final_answer", END)
-    
+    workflow.add_edge("outline", "write")
+    workflow.add_edge("write", END)
+
     return workflow.compile()
 
 
+# =========================
+# 运行示例
+# =========================
+
 def run_storm_example():
-    """运行 STORM 示例"""
+    """运行 STORM 写作示例。"""
     load_environment()
-    
-    # 测试用例
-    test_cases = [
-        "如何制定一个有效的学习计划来掌握一门新技能？",
-        "分析气候变化对全球经济的影响",
-        "设计一个可持续发展的城市交通系统"
+
+    examples = [
+        "生成一篇介绍‘生成式 AI 在教育中的应用’的百科式文章",
+        "分析‘气候变化对全球经济的影响’并形成结构化长文",
     ]
-    
-    for i, question in enumerate(test_cases, 1):
-        print(f"测试用例 {i}:")
-        print(f"问题: {question}")
-        
-        # 创建状态
-        initial_state = StormState(question=question)
-        
-        # 运行工作流
-        workflow = create_storm_workflow()
-        result = workflow.invoke(initial_state)
-        
-        print(f"思考步骤: {len(result['thoughts'])}")
-        print(f"观察结果: {len(result['observations'])}")
-        print(f"反思内容: {len(result['reflections'])}")
-        print(f"最终答案: {result['final_answer']}")
-        print("-" * 50)
+
+    graph = create_storm_workflow()
+
+    for i, topic in enumerate(examples, 1):
+        print(f"\n===== 示例 {i} =====")
+        print(f"主题：{topic}")
+        init = StormWriteState(topic=topic)
+        result = graph.invoke(init)
+        print(f"视角：{result['perspectives']}")
+        print(f"大纲：{result['outline']}")
+        print("\n正文预览（前 600 字）：")
+        body = result.get("article") or "(无正文)"
+        print(body[:600])
+        print("\n—— 完 ——")
 
 
 if __name__ == "__main__":

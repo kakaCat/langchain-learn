@@ -1,448 +1,212 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Module 9: Self-Discover 示例（自发现技能与成功标准的多阶段工作流）
+08_self_discover_demo.py — LangChain v1 create_agent 版本（Self-Discover 自我发现）
 
-简化版 Self-Discover：
-- Discover：LLM 自主“发现”解决问题所需的技能清单、成功标准（Rubric）以及高层计划步骤
-- Execute：按计划逐步执行，每个步骤结合技能与成功标准生成内容
-- Evaluate：对汇总结果进行评估，判定是否满足成功标准，并提出改进建议
-- Revise：若未满足，则根据建议与技能进行一次聚合修订
-- Finalize：输出最终答案
-
-特性：
-- 无外部工具调用（纯内部推理），每次对话独立
-- 使用 LangGraph 管理工作流与状态
-- CLI 交互，兼容 dict/数据类两种返回形态
+统一工具与 CLI。该示例强调：识别缺失信息 → 提出澄清 → 分解任务 → 执行 → 简短反思。
 """
+
 import os
-import sys
-from typing import List, Optional
-from dataclasses import dataclass, field
+from typing import Optional
+from datetime import datetime
 
-# 终端中文输出
-sys.stdout.reconfigure(encoding='utf-8')
+try:
+    from dotenv import load_dotenv
+except Exception:
+    load_dotenv = None
 
-from dotenv import load_dotenv
+from langchain.agents import create_agent
+from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langgraph.graph import StateGraph, END
+from typing import Optional
+from typing_extensions import TypedDict
 
-# 环境
+from langchain_core.output_parsers import StrOutputParser
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+
+from langgraph.graph import END, START, StateGraph
 
 def load_environment():
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
-# 模型
-
 def get_llm() -> ChatOpenAI:
+
+    """创建并配置语言模型实例"""
     api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    model = os.getenv("OPENAI_MODEL", "deepseek-chat")
     base_url = os.getenv("OPENAI_BASE_URL")
     temperature = float(os.getenv("OPENAI_TEMPERATURE", "0"))
-    max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "768"))
-    return ChatOpenAI(
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        timeout=120,
-        max_retries=3,
-        request_timeout=120,
-        verbose=True,
-    )
+    max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "512"))
+    kwargs = {
+        "model": model,
+        "api_key": api_key,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "timeout": 120,
+        "max_retries": 3,
+        "request_timeout": 120,
+        "verbose": False,
+        "base_url": base_url
+    }
 
-# 状态
-
-@dataclass
-class AgentState:
-    messages: List[BaseMessage]
-    question: str
-    skills: List[str] = field(default_factory=list)  # 自发现技能
-    rubric: List[str] = field(default_factory=list)  # 成功标准
-    plan_steps: List[str] = field(default_factory=list)  # 高层计划
-    drafts: List[str] = field(default_factory=list)   # 每步输出草稿
-    current_index: int = 0
-    final_answer: Optional[str] = None
-    suggestions: Optional[str] = None
-    success: bool = False
-
-# Discover：自发现技能、成功标准和计划
-
-def discover_node(state: AgentState) -> AgentState:
-    llm = get_llm()
-    prompt = (
-        "请针对用户问题，自主‘发现’解决所需的技能清单、成功标准（Rubric）以及高层计划步骤。\n"
-        "严格输出如下结构：\n"
-        "技能:\n- <技能1>\n- <技能2>\n- ...\n"
-        "成功标准:\n- <标准1>\n- <标准2>\n- ...\n"
-        "计划:\n1. <步骤1>\n2. <步骤2>\n3. <步骤3>（如需要可更多）\n\n"
-        f"用户问题：{state.question}"
-    )
-    ai = llm.invoke([HumanMessage(content=prompt)])
-    content = ai.content
-
-    skills, rubric, plans = parse_discover_content(content)
-
-    new_messages = state.messages.copy()
-    new_messages.append(AIMessage(content=(
-        "Discover 阶段：\n"
-        "技能：\n" + "\n".join(f"- {s}" for s in skills) + "\n\n" +
-        "成功标准：\n" + "\n".join(f"- {r}" for r in rubric) + "\n\n" +
-        "计划：\n" + "\n".join(f"{i+1}. {p}" for i, p in enumerate(plans))
-    )))
-
-    return AgentState(
-        messages=new_messages,
-        question=state.question,
-        skills=skills,
-        rubric=rubric,
-        plan_steps=plans,
-        drafts=[],
-        current_index=0,
-        final_answer=None,
-        suggestions=None,
-        success=False,
-    )
-
-# Execute：执行当前计划步骤
-
-def execute_step_node(state: AgentState) -> AgentState:
-    llm = get_llm()
-    idx = state.current_index
-    step = state.plan_steps[idx] if idx < len(state.plan_steps) else ""
-    skills_text = "\n".join(f"- {s}" for s in state.skills) if state.skills else "(无)"
-    rubric_text = "\n".join(f"- {r}" for r in state.rubric) if state.rubric else "(无)"
-
-    prompt = (
-        "你将执行计划中的一个步骤，结合已发现技能与成功标准产出该步骤的具体内容。\n"
-        "要求：清晰、结构化、可执行；必要时给出要点或步骤，避免泛泛而谈。\n"
-        f"当前步骤：{step}\n"
-        f"已发现技能：\n{skills_text}\n"
-        f"成功标准：\n{rubric_text}\n"
-    )
-    ai = llm.invoke([HumanMessage(content=prompt)])
-    draft = ai.content
-
-    new_drafts = state.drafts + [draft]
-    new_messages = state.messages.copy()
-    new_messages.append(AIMessage(content=f"Execute 阶段（步骤 {idx+1}/{len(state.plan_steps)}）：\n{draft}"))
-
-    return AgentState(
-        messages=new_messages,
-        question=state.question,
-        skills=state.skills,
-        rubric=state.rubric,
-        plan_steps=state.plan_steps,
-        drafts=new_drafts,
-        current_index=state.current_index + 1,
-        final_answer=None,
-        suggestions=None,
-        success=False,
-    )
-
-# 进度检查：继续执行或进入评估
-
-def progress_check_node(state: AgentState) -> AgentState:
-    new_messages = state.messages.copy()
-    if state.current_index < len(state.plan_steps):
-        new_messages.append(AIMessage(content="Progress Check：继续执行下一步骤。"))
-        return AgentState(
-            messages=new_messages,
-            question=state.question,
-            skills=state.skills,
-            rubric=state.rubric,
-            plan_steps=state.plan_steps,
-            drafts=state.drafts,
-            current_index=state.current_index,
-            final_answer=None,
-            suggestions=None,
-            success=False,
-        )
-    else:
-        # 汇总最终答案
-        final_text = assemble_final_answer(state)
-        new_messages.append(AIMessage(content="Progress Check：所有步骤完成，准备评估最终答案。"))
-        return AgentState(
-            messages=new_messages,
-            question=state.question,
-            skills=state.skills,
-            rubric=state.rubric,
-            plan_steps=state.plan_steps,
-            drafts=state.drafts,
-            current_index=state.current_index,
-            final_answer=final_text,
-            suggestions=None,
-            success=False,
-        )
-
-# Evaluate：评估最终答案是否满足成功标准
-
-def evaluate_node(state: AgentState) -> AgentState:
-    llm = get_llm()
-    rubric_text = "\n".join(f"- {r}" for r in state.rubric) if state.rubric else "(无)"
-    prompt = (
-        "你是评估器。请针对最终答案与成功标准进行评估。\n"
-        "严格输出以下结构：\n"
-        "结论: 成功 或 失败\n"
-        "理由: <一句话或几句话>\n"
-        "改进建议: <若失败，给出具体可执行建议；若成功，可填'无'>\n\n"
-        f"成功标准：\n{rubric_text}\n\n"
-        f"最终答案：\n{state.final_answer or ''}"
-    )
-    ai = llm.invoke([HumanMessage(content=prompt)])
-    feedback = ai.content
-
-    success = parse_success(feedback)
-    suggestions = parse_suggestions(feedback)
-
-    new_messages = state.messages.copy()
-    new_messages.append(AIMessage(content=f"Evaluate 阶段：\n{feedback}"))
-
-    return AgentState(
-        messages=new_messages,
-        question=state.question,
-        skills=state.skills,
-        rubric=state.rubric,
-        plan_steps=state.plan_steps,
-        drafts=state.drafts,
-        current_index=state.current_index,
-        final_answer=state.final_answer,
-        suggestions=suggestions,
-        success=success,
-    )
-
-# Revise：若未满足标准，进行聚合修订
-
-def revise_node(state: AgentState) -> AgentState:
-    llm = get_llm()
-    skills_text = "\n".join(f"- {s}" for s in state.skills) if state.skills else "(无)"
-    prompt = (
-        "请根据评估建议与已发现技能，对最终答案进行一次聚合修订，使其更符合成功标准。\n"
-        "输出要求：保持清晰结构与可执行性，不要冗长解释。\n"
-        f"评估建议：\n{state.suggestions or ''}\n\n"
-        f"已发现技能：\n{skills_text}\n\n"
-        f"原最终答案：\n{state.final_answer or ''}"
-    )
-    ai = llm.invoke([HumanMessage(content=prompt)])
-    revised = ai.content
-
-    new_messages = state.messages.copy()
-    new_messages.append(AIMessage(content=f"Revise 阶段：\n{revised}"))
-
-    return AgentState(
-        messages=new_messages,
-        question=state.question,
-        skills=state.skills,
-        rubric=state.rubric,
-        plan_steps=state.plan_steps,
-        drafts=state.drafts,
-        current_index=state.current_index,
-        final_answer=revised,
-        suggestions=state.suggestions,
-        success=True,  # 单次修订后结束
-    )
-
-# Finalize：输出最终答案
-
-def finalize_node(state: AgentState) -> AgentState:
-    llm = get_llm()
-    prompt = (
-        "请直接输出最终答案，不要添加与过程相关的说明。保持结构化与可执行性。\n\n"
-        f"最终答案：\n{state.final_answer or assemble_final_answer(state)}"
-    )
-    ai = llm.invoke([HumanMessage(content=prompt)])
-
-    new_messages = state.messages.copy()
-    new_messages.append(AIMessage(content=f"最终答案：\n{ai.content}"))
-
-    return AgentState(
-        messages=new_messages,
-        question=state.question,
-        skills=state.skills,
-        rubric=state.rubric,
-        plan_steps=state.plan_steps,
-        drafts=state.drafts,
-        current_index=state.current_index,
-        final_answer=ai.content,
-        suggestions=state.suggestions,
-        success=True,
-    )
-
-# 解析 Discover 输出
-
-def parse_discover_content(text: str) -> (List[str], List[str], List[str]):
-    lines = [l.strip() for l in text.split("\n")]
-    section = None
-    skills: List[str] = []
-    rubric: List[str] = []
-    plans: List[str] = []
-    for l in lines:
-        low = l.lower()
-        if low.startswith("技能"):
-            section = "skills"; continue
-        if low.startswith("成功标准"):
-            section = "rubric"; continue
-        if low.startswith("计划"):
-            section = "plan"; continue
-        if l.startswith("-"):
-            item = l.lstrip("- ")
-            if section == "skills":
-                skills.append(item)
-            elif section == "rubric":
-                rubric.append(item)
-        elif l[:1].isdigit():
-            # 形如 "1. xxx"
-            dot_pos = l.find(".")
-            item = l[dot_pos+1:].strip() if dot_pos != -1 else l
-            if section == "plan":
-                plans.append(item)
-    # 兜底：若解析失败，简单分段
-    if not skills:
-        skills = [s.strip() for s in text.split("技能")[-1].split("\n") if s.strip().startswith("-")]
-        skills = [s.lstrip("- ") for s in skills]
-    if not rubric:
-        rubric = [r.strip() for r in text.split("成功标准")[-1].split("\n") if r.strip().startswith("-")]
-        rubric = [r.lstrip("- ") for r in rubric]
-    if not plans:
-        plans = [p.strip() for p in text.split("计划")[-1].split("\n") if p.strip() and (p.strip()[0].isdigit() or p.startswith("-"))]
-        plans = [p.lstrip("- ") for p in plans]
-    # 去重与裁剪
-    skills = [s for s in skills if s][:8]
-    rubric = [r for r in rubric if r][:8]
-    plans = [p for p in plans if p][:8]
-    if not plans:
-        plans = ["分解问题", "列出可执行清单", "给出注意事项与结论"]
-    return skills, rubric, plans
-
-# 解析评估结果成功与建议
-
-def parse_success(text: str) -> bool:
-    t = text.lower()
-    positive = any(k in t for k in ["成功", "通过", "满足", "yes", "pass"])
-    negative = any(k in t for k in ["失败", "不符合", "no", "not pass"])
-    if positive and not negative:
-        return True
-    if negative and not positive:
-        return False
-    return "结论" in text and ("成功" in text)
+    return ChatOpenAI(**kwargs)
 
 
-def parse_suggestions(text: str) -> str:
-    lines = [l.strip() for l in text.split("\n")]
-    started = False
-    suggestions: List[str] = []
-    for l in lines:
-        if l.startswith("改进建议"):
-            started = True
-            continue
-        if started:
-            if l:
-                suggestions.append(l)
-    return "\n".join(suggestions).strip()
+# Inline Self-Discover prompts (Hub 不可用时的占位模板)
+select_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a self-discovery selector. Read the task and available reasoning modules, then select the most helpful ones.",
+    ),
+    (
+        "human",
+        "Task: {task_description}\nAvailable reasoning modules:\n{reasoning_modules}\n\nReturn a concise list of selected module numbers or names and a short rationale.",
+    ),
+])
 
-# 汇总最终答案
+adapt_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a self-discovery adapter. Adapt the selected modules for this specific task and context.",
+    ),
+    (
+        "human",
+        "Task: {task_description}\nSelected modules:\n{selected_modules}\nAvailable reasoning modules:\n{reasoning_modules}\n\nReturn an adapted list with brief instructions per module.",
+    ),
+])
 
-def assemble_final_answer(state: AgentState) -> str:
-    parts = []
-    for i, d in enumerate(state.drafts, start=1):
-        parts.append(f"步骤 {i}:\n{d}")
-    parts.append("注意事项：\n- 遵循成功标准\n- 保持清晰与可执行性")
-    return "\n\n".join(parts)
+structured_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a structurer. Produce a clear step-by-step reasoning structure based on the adapted modules.",
+    ),
+    (
+        "human",
+        "Task: {task_description}\nAdapted modules:\n{adapted_modules}\n\nReturn a numbered plan (1., 2., 3., ...) describing the reasoning workflow.",
+    ),
+])
 
-# 路由
+reasoning_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a reasoner. Follow the provided reasoning structure to answer the task thoroughly and concisely.",
+    ),
+    (
+        "human",
+        "Task: {task_description}\nReasoning structure:\n{reasoning_structure}\n\nReturn the final answer in 3-6 sentences.",
+    ),
+])
 
-def after_discover(state: AgentState) -> str:
-    return "execute"
 
-def after_execute(state: AgentState) -> str:
-    return "progress_check"
+def select(inputs):
+    select_chain = select_prompt | get_llm() | StrOutputParser()
+    return {"selected_modules": select_chain.invoke(inputs)}
 
-def after_progress(state: AgentState) -> str:
-    return "execute" if state.current_index < len(state.plan_steps) else "evaluate"
 
-def after_evaluate(state: AgentState) -> str:
-    return "finalize" if state.success else "revise"
+def adapt(inputs):
+    adapt_chain = adapt_prompt | get_llm() | StrOutputParser()
+    return {"adapted_modules": adapt_chain.invoke(inputs)}
 
-def after_revise(state: AgentState) -> str:
-    return "finalize"
 
-# 构建工作流
+def structure(inputs):
+    structure_chain = structured_prompt | get_llm() | StrOutputParser()
+    return {"reasoning_structure": structure_chain.invoke(inputs)}
 
-def create_self_discover_workflow():
-    graph = StateGraph(AgentState)
-    graph.add_node("discover", discover_node)
-    graph.add_node("execute", execute_step_node)
-    graph.add_node("progress_check", progress_check_node)
-    graph.add_node("evaluate", evaluate_node)
-    graph.add_node("revise", revise_node)
-    graph.add_node("finalize", finalize_node)
 
-    graph.set_entry_point("discover")
+def reason(inputs):
+    reasoning_chain = reasoning_prompt | get_llm() | StrOutputParser()
+    return {"answer": reasoning_chain.invoke(inputs)}
 
-    graph.add_conditional_edges("discover", after_discover, {"execute": "execute"})
-    graph.add_conditional_edges("execute", after_execute, {"progress_check": "progress_check"})
-    graph.add_conditional_edges("progress_check", after_progress, {
-        "execute": "execute",
-        "evaluate": "evaluate",
-    })
-    graph.add_conditional_edges("evaluate", after_evaluate, {
-        "finalize": "finalize",
-        "revise": "revise",
-    })
-    graph.add_conditional_edges("revise", after_revise, {"finalize": "finalize"})
+class SelfDiscoverState(TypedDict):
+    reasoning_modules: str
+    task_description: str
+    selected_modules: Optional[str]
+    adapted_modules: Optional[str]
+    reasoning_structure: Optional[str]
+    answer: Optional[str]
 
-    graph.add_edge("finalize", END)
+def create_workflow():
 
-    app = graph.compile()
+    workflow = StateGraph(SelfDiscoverState)
+    workflow.add_node("select", select)
+    workflow.add_node("adapt", adapt)
+    workflow.add_node("structure", structure)
+    workflow.add_node("reason", reason)
+    workflow.add_edge(START, "select")
+    workflow.add_edge("select", "adapt")
+    workflow.add_edge("adapt", "structure")
+    workflow.add_edge("structure", "reason")
+    workflow.add_edge("reason", END)
+
+    # Finally, we compile it!
+    # This compiles it into a LangChain Runnable,
+    # meaning you can use it as you would any other runnable
+    app = workflow.compile()
+    app.get_graph().draw_mermaid_png(output_file_path='blog/flow_01.png')
     return app
 
-# CLI
-
-def main():
+def main() -> None:
     load_environment()
-    app = create_self_discover_workflow()
+    """运行工作流并输出最终结果"""
+    app = create_workflow()
 
-    print("===== Self-Discover 演示 ======")
-    print("该代理会：Discover（自发现技能/标准/计划）→ Execute（逐步执行）→ Evaluate（评估）→ Revise（修订）→ Finalize（输出最终答案）。")
-    print("每次对话独立，不调用外部工具。输入 '退出' 结束对话。\n")
-    print("示例问题（适合 Self-Discover 的任务）：")
-    print("1. 为职场新人设计一周的时间管理方案，并自发现成功标准与执行计划")
-    print("2. 规划一个三步骤的健康早餐准备流程，包含标准与注意事项")
-    print("3. 讲解如何入门数据结构（数组、链表、栈/队列），并给出学习计划")
+    reasoning_modules = [
+    "1. How could I devise an experiment to help solve that problem?",
+    "2. Make a list of ideas for solving this problem, and apply them one by one to the problem to see if any progress can be made.",
+    # "3. How could I measure progress on this problem?",
+    "4. How can I simplify the problem so that it is easier to solve?",
+    "5. What are the key assumptions underlying this problem?",
+    "6. What are the potential risks and drawbacks of each solution?",
+    "7. What are the alternative perspectives or viewpoints on this problem?",
+    "8. What are the long-term implications of this problem and its solutions?",
+    "9. How can I break down this problem into smaller, more manageable parts?",
+    "10. Critical Thinking: This style involves analyzing the problem from different perspectives, questioning assumptions, and evaluating the evidence or information available. It focuses on logical reasoning, evidence-based decision-making, and identifying potential biases or flaws in thinking.",
+    "11. Try creative thinking, generate innovative and out-of-the-box ideas to solve the problem. Explore unconventional solutions, thinking beyond traditional boundaries, and encouraging imagination and originality.",
+    # "12. Seek input and collaboration from others to solve the problem. Emphasize teamwork, open communication, and leveraging the diverse perspectives and expertise of a group to come up with effective solutions.",
+    "13. Use systems thinking: Consider the problem as part of a larger system and understanding the interconnectedness of various elements. Focuses on identifying the underlying causes, feedback loops, and interdependencies that influence the problem, and developing holistic solutions that address the system as a whole.",
+    "14. Use Risk Analysis: Evaluate potential risks, uncertainties, and tradeoffs associated with different solutions or approaches to a problem. Emphasize assessing the potential consequences and likelihood of success or failure, and making informed decisions based on a balanced analysis of risks and benefits.",
+    # "15. Use Reflective Thinking: Step back from the problem, take the time for introspection and self-reflection. Examine personal biases, assumptions, and mental models that may influence problem-solving, and being open to learning from past experiences to improve future approaches.",
+    "16. What is the core issue or problem that needs to be addressed?",
+    "17. What are the underlying causes or factors contributing to the problem?",
+    "18. Are there any potential solutions or strategies that have been tried before? If yes, what were the outcomes and lessons learned?",
+    "19. What are the potential obstacles or challenges that might arise in solving this problem?",
+    "20. Are there any relevant data or information that can provide insights into the problem? If yes, what data sources are available, and how can they be analyzed?",
+    "21. Are there any stakeholders or individuals who are directly affected by the problem? What are their perspectives and needs?",
+    "22. What resources (financial, human, technological, etc.) are needed to tackle the problem effectively?",
+    "23. How can progress or success in solving the problem be measured or evaluated?",
+    "24. What indicators or metrics can be used?",
+    "25. Is the problem a technical or practical one that requires a specific expertise or skill set? Or is it more of a conceptual or theoretical problem?",
+    "26. Does the problem involve a physical constraint, such as limited resources, infrastructure, or space?",
+    "27. Is the problem related to human behavior, such as a social, cultural, or psychological issue?",
+    "28. Does the problem involve decision-making or planning, where choices need to be made under uncertainty or with competing objectives?",
+    "29. Is the problem an analytical one that requires data analysis, modeling, or optimization techniques?",
+    "30. Is the problem a design challenge that requires creative solutions and innovation?",
+    "31. Does the problem require addressing systemic or structural issues rather than just individual instances?",
+    "32. Is the problem time-sensitive or urgent, requiring immediate attention and action?",
+    "33. What kinds of solution typically are produced for this kind of problem specification?",
+    "34. Given the problem specification and the current best solution, have a guess about other possible solutions."
+    "35. Let’s imagine the current best solution is totally wrong, what other ways are there to think about the problem specification?"
+    "36. What is the best way to modify this current best solution, given what you know about these kinds of problem specification?"
+    "37. Ignoring the current best solution, create an entirely new solution to the problem."
+    # "38. Let’s think step by step."
+    "39. Let’s make a step by step plan and implement it with good notation and explanation.",
+]
 
-    while True:
-        try:
-            user_input = input("你: ")
-            if user_input.lower() in ["退出", "exit", "quit", "q"]:
-                print("代理: 再见！")
-                break
 
-            init_state = AgentState(
-                messages=[HumanMessage(content=user_input)],
-                question=user_input,
-            )
-            final_state = app.invoke(init_state)
+    task_example = "Lisa has 10 apples. She gives 3 apples to her friend and then buys 5 more apples from the store. How many apples does Lisa have now?"
 
-            # 获取消息列表（兼容 dict / 数据类）
-            messages = []
-            if isinstance(final_state, dict):
-                messages = final_state.get("messages", [])
-            else:
-                messages = getattr(final_state, "messages", [])
+    task_example = """This SVG path element <path d="M 55.57,80.69 L 57.38,65.80 M 57.38,65.80 L 48.90,57.46 M 48.90,57.46 L
+    45.58,47.78 M 45.58,47.78 L 53.25,36.07 L 66.29,48.90 L 78.69,61.09 L 55.57,80.69"/> draws a:
+    (A) circle (B) heptagon (C) hexagon (D) kite (E) line (F) octagon (G) pentagon(H) rectangle (I) sector (J) triangle"""
 
-            # 输出最后一个 AI 回复（最终答案）
-            for msg in reversed(messages):
-                if isinstance(msg, AIMessage):
-                    print(f"代理: {msg.content}")
-                    break
-            else:
-                print("代理: 对不起，未能生成答案。")
-        except KeyboardInterrupt:
-            print("\n代理: 对话被中断，再见！")
-            break
-        except Exception as e:
-            print(f"代理: 发生错误: {str(e)}")
+    reasoning_modules_str = "\n".join(reasoning_modules)
+
+    for s in app.stream(
+        {"task_description": task_example, "reasoning_modules": reasoning_modules_str}
+    ):
+        print(s)
+
 
 if __name__ == "__main__":
     main()

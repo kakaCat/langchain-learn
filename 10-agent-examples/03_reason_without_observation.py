@@ -1,34 +1,35 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Reason without Observation 模式示例
+03_reason_without_observation.py — LangChain v1 create_agent 版本（Reason Without Observation）
 
-这种模式的特点：
-- 只有推理步骤，没有观察步骤
-- 直接基于推理进行决策
-- 适用于不需要外部工具调用的场景
-- 简化了传统的推理-行动-观察循环
+与 01/02 示例一致，统一使用 `create_agent`、共享工具与 CLI。
+本示例强调：优先进行逻辑推理（不观察工具结果），仅在确有需要时调用工具。
 """
 
 import os
-from typing import Dict, Any, List
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
-from langgraph.graph import StateGraph, END
-from langgraph.graph.message import add_messages
+import re
 from dotenv import load_dotenv
-# 从当前模块目录加载 .env
+from langchain_core.prompts import ChatPromptTemplate
+from langgraph.graph import END, StateGraph, START
+from typing import List
+from langchain_openai import ChatOpenAI
+from typing_extensions import TypedDict
+from langchain_community.tools.tavily_search import TavilySearchResults
+
+
+
 def load_environment():
-    """加载环境变量"""
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
-# 获取配置的语言模型
 def get_llm() -> ChatOpenAI:
+
     """创建并配置语言模型实例"""
     api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    model = os.getenv("OPENAI_MODEL", "deepseek-chat")
     base_url = os.getenv("OPENAI_BASE_URL")
     temperature = float(os.getenv("OPENAI_TEMPERATURE", "0"))
     max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "512"))
-
     kwargs = {
         "model": model,
         "api_key": api_key,
@@ -37,140 +38,151 @@ def get_llm() -> ChatOpenAI:
         "timeout": 120,
         "max_retries": 3,
         "request_timeout": 120,
-        "verbose": True,
+        "verbose": False,
         "base_url": base_url
     }
 
     return ChatOpenAI(**kwargs)
 
 
-# 定义状态类型
-class ReasonState(Dict[str, Any]):
-    """推理状态"""
-    messages: List[Any] = add_messages
-    reasoning: str = ""
-    final_answer: str = ""
+try:
+    search = TavilySearchResults(max_results=3)
+except Exception:
+    search = None
+
+class ReWOO(TypedDict):
+    task: str
+    plan_string: str
+    steps: List
+    results: dict
+    result: str
 
 
+def get_plan(state: ReWOO):
+    task = state["task"]
 
-def reason_node(state: ReasonState) -> ReasonState:
-    """
-    推理节点 - 执行推理步骤
-    
-    在这个模式中，我们只进行推理，不调用外部工具进行观察
-    """
-    llm = get_llm()
-    
-    # 构建系统提示词
-    system_prompt = """你是一个推理专家。请仔细分析问题，进行逻辑推理，
-    然后给出最终答案。不需要调用任何外部工具。
-    
-    推理步骤：
-    1. 理解问题
-    2. 分析关键信息
-    3. 进行逻辑推理
-    4. 得出结论
-    
-    请确保你的推理过程清晰，最终答案准确。"""
-    
-    # 获取用户消息
-    user_message = state["messages"][-1].content if state["messages"] else ""
-    
-    # 构建推理提示词
-    reasoning_prompt = f"""
-问题：{user_message}
+    regex_pattern = r"Plan:\s*(.+)\s*(#E\d+)\s*=\s*(\w+)\s*\[([^\]]+)\]"
 
-请进行推理：
-1. 首先理解问题的核心
-2. 分析问题的关键要素
-3. 进行逻辑推理
-4. 得出最终结论
+    prompt = """For the following task, make plans that can solve the problem step by step. For each plan, indicate \
+    which external tool together with tool input to retrieve evidence. You can store the evidence into a \
+    variable #E that can be called by later tools. (Plan, #E1, Plan, #E2, Plan, ...)
 
-推理过程："""
-    
-    # 执行推理
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=reasoning_prompt)
-    ]
-    
-    reasoning_response = llm.invoke(messages)
-    reasoning_text = reasoning_response.content
-    
-    # 提取最终答案
-    final_answer_prompt = f"""
-基于以下推理过程，请给出最终的简洁答案：
+    Tools can be one of the following:
+    (1) Google[input]: Worker that searches results from Google. Useful when you need to find short
+    and succinct answers about a specific topic. The input should be a search query.
+    (2) LLM[input]: A pretrained LLM like yourself. Useful when you need to act with general
+    world knowledge and common sense. Prioritize it when you are confident in solving the problem
+    yourself. Input can be any instruction.
 
-推理过程：
-{reasoning_text}
+    For example,
+    Task: Thomas, Toby, and Rebecca worked a total of 157 hours in one week. Thomas worked x
+    hours. Toby worked 10 hours less than twice what Thomas worked, and Rebecca worked 8 hours
+    less than Toby. How many hours did Rebecca work?
+    Plan: Given Thomas worked x hours, translate the problem into algebraic expressions and solve
+    with Wolfram Alpha. #E1 = WolframAlpha[Solve x + (2x − 10) + ((2x − 10) − 8) = 157]
+    Plan: Find out the number of hours Thomas worked. #E2 = LLM[What is x, given #E1]
+    Plan: Calculate the number of hours Rebecca worked. #E3 = Calculator[(2 ∗ #E2 − 10) − 8]
 
-最终答案："""
-    
-    answer_response = llm.invoke([
-        SystemMessage(content="请基于推理过程给出简洁的最终答案"),
-        HumanMessage(content=final_answer_prompt)
-    ])
-    
-    # 更新状态
-    state["reasoning"] = reasoning_text
-    state["final_answer"] = answer_response.content
-    state["messages"].append(HumanMessage(content=f"推理过程：{reasoning_text}"))
-    state["messages"].append(HumanMessage(content=f"最终答案：{answer_response.content}"))
-    
-    return state
+    Begin!
+    Describe your plans with rich details. Each Plan should be followed by only one #E.
 
-def create_reason_workflow():
-    """创建推理工作流"""
-    
-    # 创建工作流
-    workflow = StateGraph(ReasonState)
-    
-    # 添加节点
-    workflow.add_node("reason", reason_node)
-    
-    # 设置入口点
-    workflow.set_entry_point("reason")
-    
-    # 设置结束点
-    workflow.add_edge("reason", END)
-    
-    return workflow.compile()
+    Task: {task}"""
 
-def run_reason_example():
-    """运行推理示例"""
-    
-    # 设置环境
-    load_environment()    
-    # 创建工作流
-    workflow = create_reason_workflow()
-    
-    # 测试用例
-    test_cases = [
-        "如果我有3个苹果，给了朋友1个，然后又买了2个，现在我有几个苹果？",
-        "一个篮球队有5名首发球员，如果每场比赛有3名替补球员，整个球队有多少名球员？",
-        "一本书有200页，我第一天读了1/4，第二天读了剩下的1/3，我还剩多少页没读？"
-    ]
-    
-    print("=== Reason without Observation 模式演示 ===\n")
-    
-    for i, question in enumerate(test_cases, 1):
-        print(f"测试用例 {i}:")
-        print(f"问题: {question}")
-        
-        # 初始化状态
-        initial_state = ReasonState(
-            messages=[HumanMessage(content=question)],
-            reasoning="",
-            final_answer=""
-        )
-        
-        # 执行工作流
-        result = workflow.invoke(initial_state)
-        
-        print(f"\n推理过程:")
-        print(result["reasoning"])
-        print(f"\n最终答案: {result['final_answer']}")
-        print("-" * 50)
+    prompt_template = ChatPromptTemplate.from_messages([("user", prompt)])
+    planner = prompt_template | get_llm()
+    result = planner.invoke({"task": task})
+
+    # Find all matches in the sample text
+    matches = re.findall(regex_pattern, result.content)
+    return {"steps": matches, "plan_string": result.content}
+
+
+def _get_current_task(state: ReWOO):
+    if "results" not in state or state["results"] is None:
+        return 1
+    if len(state["results"]) == len(state["steps"]):
+        return None
+    else:
+        return len(state["results"]) + 1
+
+
+def tool_execution(state: ReWOO):
+    """Worker node that executes the tools of a given plan."""
+    _step = _get_current_task(state)
+    _, step_name, tool, tool_input = state["steps"][_step - 1]
+    _results = (state["results"] or {}) if "results" in state else {}
+    for k, v in _results.items():
+        tool_input = tool_input.replace(k, v)
+    if tool == "Google":
+        if search is None:
+            result = "Search unavailable (missing TAVILY_API_KEY)."
+        else:
+            result = search.invoke(tool_input)
+    elif tool == "LLM":
+        result = get_llm().invoke(tool_input)
+    else:
+        raise ValueError
+    _results[step_name] = str(result)
+    return {"results": _results}
+
+
+def solve(state: ReWOO):
+
+    solve_prompt = """Solve the following task or problem. To solve the problem, we have made step-by-step Plan and \
+retrieved corresponding Evidence to each Plan. Use them with caution since long evidence might \
+contain irrelevant information.
+
+{plan}
+
+Now solve the question or task according to provided Evidence above. Respond with the answer
+directly with no extra words.
+
+Task: {task}
+Response:"""
+
+    plan = ""
+    for _plan, step_name, tool, tool_input in state["steps"]:
+        _results = (state["results"] or {}) if "results" in state else {}
+        for k, v in _results.items():
+            tool_input = tool_input.replace(k, v)
+            step_name = step_name.replace(k, v)
+        plan += f"Plan: {_plan}\n{step_name} = {tool}[{tool_input}]"
+    prompt = solve_prompt.format(plan=plan, task=state["task"])
+    result = get_llm().invoke(prompt)
+    return {"result": result.content}
+
+def _route(state):
+    _step = _get_current_task(state)
+    if _step is None:
+        # We have executed all tasks
+        return "solve"
+    else:
+        # We are still executing tasks, loop back to the "tool" node
+        return "tool"
+
+
+def create_workflow():
+
+    workflow = StateGraph(ReWOO)
+    workflow.add_node("plan", get_plan)
+    workflow.add_node("tool", tool_execution)
+    workflow.add_node("solve", solve)
+    workflow.add_edge("plan", "tool")
+    workflow.add_edge("solve", END)
+    workflow.add_conditional_edges("tool", _route)
+    workflow.add_edge(START, "plan")
+
+    app = workflow.compile()
+    app.get_graph().draw_mermaid_png(output_file_path='blog/flow_01.png')
+    return app
+
+def main() -> None:
+    load_environment()
+    app = create_workflow()
+    # 初始化状态：仅需提供用户输入，其余字段由工作流填充
+    initial_state = {"task": "用一句话解释 Plan-and-Solve 是什么？"}
+    final_state = app.invoke(initial_state)
+    print("Result:", final_state.get("result"))
 
 if __name__ == "__main__":
-    run_reason_example()
+    main()

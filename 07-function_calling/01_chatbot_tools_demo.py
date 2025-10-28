@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain.agents import create_agent
 
 # 从当前模块目录加载 .env
 def load_environment():
@@ -48,12 +48,12 @@ def get_llm() -> ChatOpenAI:
 def calculator(a: float, b: float, operation: str) -> float:
     """
     用于执行基本数学计算的工具。
-    
+
     参数:
     a: 第一个数字
     b: 第二个数字
     operation: 操作类型，可以是 'add'(加), 'subtract'(减), 'multiply'(乘), 'divide'(除)
-    
+
     返回:
     计算结果
     """
@@ -75,10 +75,10 @@ def calculator(a: float, b: float, operation: str) -> float:
 def get_current_date(format: str = "%Y-%m-%d") -> str:
     """
     获取当前日期。
-    
+
     参数:
     format: 日期格式字符串，默认为 '%Y-%m-%d'(年-月-日)
-    
+
     返回:
     当前日期的字符串表示
     """
@@ -89,18 +89,18 @@ def get_current_date(format: str = "%Y-%m-%d") -> str:
 def get_weather(city: str, date: str = None) -> Dict[str, Union[str, float]]:
     """
     获取指定城市的天气信息。
-    
+
     参数:
     city: 城市名称（中文）
     date: 日期，格式为 YYYY-MM-DD，如果为None则获取当前日期天气
-    
+
     返回:
     包含天气信息的字典，包括温度、天气状况等
     """
     # 这是一个模拟工具，实际应用中可以连接到真实的天气API
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
-    
+
     # 模拟一些城市的天气数据
     weather_data = {
         "北京": {"temperature": 25, "condition": "晴", "wind": "3-4级"},
@@ -109,10 +109,10 @@ def get_weather(city: str, date: str = None) -> Dict[str, Union[str, float]]:
         "深圳": {"temperature": 31, "condition": "多云转晴", "wind": "2-3级"},
         "杭州": {"temperature": 27, "condition": "晴", "wind": "1-2级"}
     }
-    
+
     # 如果城市不在模拟数据中，返回默认数据
     city_data = weather_data.get(city, {"temperature": 22, "condition": "未知", "wind": "未知"})
-    
+
     return {
         "city": city,
         "date": date,
@@ -126,11 +126,11 @@ def get_weather(city: str, date: str = None) -> Dict[str, Union[str, float]]:
 def translate_text(text: str, target_language: str = "en") -> str:
     """
     将文本翻译成指定语言。
-    
+
     参数:
     text: 要翻译的文本
     target_language: 目标语言代码，默认为 'en'(英语)，可选 'zh'(中文), 'ja'(日语), 'ko'(韩语), 'fr'(法语), 'de'(德语)
-    
+
     返回:
     翻译后的文本
     """
@@ -142,11 +142,11 @@ def translate_text(text: str, target_language: str = "en") -> str:
         "fr": {"你好": "Bonjour", "谢谢": "Merci", "再见": "Au revoir"},
         "de": {"你好": "Hallo", "谢谢": "Danke", "再见": "Auf Wiedersehen"}
     }
-    
+
     # 检查是否有直接匹配的翻译
     if text in translations.get(target_language, {}):
         return translations[target_language][text]
-    
+
     # 否则返回一个模拟的翻译结果
     return f"[翻译到{target_language}] {text}"
 
@@ -155,28 +155,36 @@ def create_tool_agent():
     """创建能够使用工具的Agent（不包含记忆功能）"""
     # 获取LLM
     llm = get_llm()
-    
+
     # 定义工具列表
     tools = [calculator, get_current_date, get_weather, translate_text]
-    
+
     # 创建提示模板（确保包含agent_scratchpad）
     prompt = ChatPromptTemplate.from_messages([
         ("system", "你是一个有用的助手，能够使用工具来回答问题。请根据用户的问题选择合适的工具。"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad")
     ])
-    
+
     # 验证提示模板包含所有必需的变量
     if "agent_scratchpad" not in prompt.input_variables:
         print("警告: 提示模板缺少agent_scratchpad变量")
         print(f"当前变量: {prompt.input_variables}")
-    
+
     # 创建Agent
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    
-    # 创建Agent执行器
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
-    
+    agent_executor = create_agent(
+        model=llm,
+        tools=tools,
+        system_prompt="""你是一个有用的助手，能够使用工具来回答问题。请根据用户的问题选择合适的工具。
+
+工作流程：
+1. Thought: 分析问题，制定解决策略
+2. Action: 调用合适的工具
+3. Observation: 分析工具返回的结果
+4. 重复直到解决问题
+"""
+    )
+
     # 直接返回agent_executor，不添加会话历史功能
     return agent_executor
 
@@ -184,7 +192,7 @@ def main() -> None:
     try:
         # 加载环境变量
         load_environment()
-        
+
         print("===== LangChain 工具聊天机器人演示 ======")
         print("我可以使用多种工具来帮助你，包括计算器、日期查询、天气查询和文本翻译。")
         print("输入 'exit' 或 'quit' 退出程序。")
@@ -195,26 +203,27 @@ def main() -> None:
         print("3. 北京今天的天气怎么样？")
         print("4. 把'你好'翻译成英语。")
         print("\n请输入你的问题：")
-        
+
         # 创建Agent
         agent = create_tool_agent()
-        
+
         # 交互式对话循环
         while True:
             user_input = input("用户: ")
-            
+
             if user_input.lower() in ["exit", "quit", "退出"]:
                 print("再见！")
                 break
-            
+
             # 直接调用Agent处理用户输入
             response = agent.invoke({
-                "input": user_input,
-                "agent_scratchpad": []  # 提供空的agent_scratchpad列表
+                "messages": [
+                    {"role": "user", "content": user_input}
+                ]
             })
-            
+
             print(f"AI: {response['output']}")
-        
+
     except Exception as e:
         print(f"错误: {e}")
         import traceback

@@ -1,12 +1,141 @@
-#!/usr/bin/env python3
-"""Plan-and-Solve 代理（无记忆版）
+---
+title: "LangChain 入门教程：Plan-and-Solve 代理实现详解"
+description: "深入解析 Plan-and-Solve（先规划再执行）代理模式，从原理到 LangChain/LangGraph 实现，掌握规划与行动结合的智能代理构建。"
+keywords:
+  - LangChain
+  - Plan-and-Solve
+  - Agent
+  - Planning
+  - LangGraph
+  - Tool Usage
+  - Prompt Engineering
+  - AI Agent
+tags:
+  - Tutorial
+  - Agent
+  - Planning
+  - LLM
+author: "langchain-learn"
+date: "2025-10-25"
+lang: "zh-CN"
+canonical: "/blog/langchain-plan-and-solve-agent-tutorial"
+audience: "中级 / 具备Python基础和LLM应用经验的AI工程师"
+difficulty: "intermediate"
+estimated_read_time: "12-18min"
+topics:
+  - LangChain Agents
+  - Planning Pattern
+  - LangGraph Workflow
+  - Prompt Engineering
+entities:
+  - LangChain
+  - LangGraph
+  - Plan-and-Solve
+  - Agent
+  - Tools
+qa_intents:
+  - "什么是 Plan-and-Solve？为什么需要它？"
+  - "Plan-and-Solve 如何把规划与执行结合？"
+  - "如何用 LangChain/LangGraph 实现该模式？"
+  - "提示词设计在 Plan/Act/Replan 中的作用是什么？"
+  - "该模式有哪些局限和适用场景？"
+---
 
-- 规划：根据用户输入生成分步计划（Plan）。
-- 执行：按步骤执行，必要时调用 Tavily 搜索工具。
-- 重规划：根据执行结果决定返回最终答案（Response）或继续计划。
+# LangChain 入门教程：Plan-and-Solve Agent 实现详解
 
-在 `blog/agent_02.png` 生成工作流图，并在终端输出最终答案。
-"""
+## 本页快捷跳转
+- 目录：
+  - [引言：为什么需要 Plan-and-Solve？](#intro)
+  - [代码示例：LangChain/LangGraph 实现](#code-example)
+  - [论文与理念：规划-执行的理论基础](#paper-content)
+  - [提示词作用：Plan / Act / Replan](#prompt-role)
+  - [缺点与局限性](#limitations)
+  - [总结](#summary)
+
+---
+
+<a id="intro" data-alt="introduction 引言 概述 plan_and_solve"></a>
+## 引言
+
+不同的 AI Agent 模式是在模拟人的思考与行为方式。Plan-and-Solve 面向复杂问题：先规划，再执行。以“拍黄瓜”为例：
+
+同一需求在复杂度上可能截然不同。用“拍黄瓜”对比：
+- 复杂问题：要“做一道拍黄瓜菜”，需要先拟定可执行的步骤，再逐步完成：
+  1) 准备食材（黄瓜、蒜、醋、酱油、香油等）
+  2) 清洗与处理（拍、切）
+  3) 调味拌匀（按口味调整）
+  4) 品尝观察，必要时微调口味
+- 简单指令：只做“拍一下黄瓜”，属于单步、无依赖，直接执行即可。
+
+因此：简单指令适合 ReAct 或一次工具调用；复杂问题更适合 Plan‑and‑Solve——先规划、再执行，并在每步依据观察必要时重规划。
+
+这个过程体现了：先制定计划→按步执行→基于观察调整。复杂问题的求解，本质是将目标分解成子任务，并在执行中迭代。Plan-and-Solve 负责“规划与重规划”，而每个子任务的具体动作可以由 ReAct 代理去完成。
+
+### Agent的实现步骤
+
+**Plan-and-Solve（先规划再执行）** 通过“先生成可执行的分步计划，再按步骤执行并根据观察结果动态重规划”的闭环，兼顾全局性与可操作性：
+1. 规划（Plan）：将目标拆解为可执行的步骤序列。
+2. 执行（Solve/Act）：逐步调用工具或回答，产出中间结果。
+3. 观察与重规划（Observe & Replan）：基于结果调整后续步骤，直到完成。
+
+该模式的核心价值：
+- 全局视角：避免盲目工具调用，先设定策略与顺序。
+- 动态适应：执行中根据观察结果迭代计划。
+- 可解释性：每步都有“计划→行动→观察”的清晰链条。
+
+---
+
+<a id="code-example" data-alt="代码示例 实现 langchain langgraph"></a>
+## 代码示例：LangChain/LangGraph 实现
+
+下面是一个简单的 LangChain/LangGraph 实现示例，展示了如何用 Plan-and-Solve 模式解决问题。
+
+### 环境准备
+
+```bash
+pip install langchain langgraph langchain-openai python-dotenv langchain-community
+
+# .env 示例（DeepSeek 模型示例；你也可替换为其他兼容模型）
+OPENAI_API_KEY=your_api_key_here
+OPENAI_BASE_URL=https://api.deepseek.com
+OPENAI_MODEL=deepseek-chat
+OPENAI_TEMPERATURE=0
+```
+
+requirements.txt
+```text
+# 核心
+langgraph>=0.6.10
+langchain>=0.3.27
+langchain-core>=0.3.76
+
+# OpenAI 提供商（使用 OpenAI API 时需要）
+langchain-openai>=0.3.28
+
+# 本地模型（使用 Ollama 时需要）
+langchain-ollama>=0.3.10
+
+# 社区集成
+langchain-community>=0.3.31
+
+# 常用辅助
+tiktoken>=0.9.0
+python-dotenv>=1.1.1
+```
+
+.env
+```text
+OPENAI_API_KEY=your_api_key_here
+OPENAI_BASE_URL=https://api.deepseek.com
+OPENAI_MODEL=deepseek-chat
+OPENAI_TEMPERATURE=0.2
+OPENAI_MAX_TOKENS=512
+
+TAVILY_API_KEY= your_tavily_api_key_here
+```
+
+```python
+
 import operator
 import os
 from pathlib import Path
@@ -280,5 +409,64 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
+```
 
+** Plan-and-Solve 构建要点 **
+- plan_step：根据输入生成执行计划列表。
+- execute_step（React模型）： 按照列表顺序执行每个任务，记录工具调用与输出。
+- replan_step： 思考执行的命令是否符合期望，不符合则更新计划，符合则继续执行计划。
+- should_end：判断是否完成任务，若完成则结束，否则继续执行。
 
+** Plan-and-Solve 提示词特点 **
+- plan_step：要求模型输出有序、完整、可执行的步骤清单，例如：制定一份简单的分步计划。
+- execute_step（React模型）：在执行任务时，要求模型根据上下文与预期，选择合适的工具并执行。
+- replan_step： 思考执行的命令是否符合期望，不符合则更新计划，符合则继续执行计划。
+---
+
+<a id="paper-content" data-alt="论文 理论基础 规划 执行"></a>
+## 论文与理念：规划-执行的理论基础
+
+Plan-and-Solve 属于“先规划后执行”的通用工程范式，灵感来源于经典 AI 的规划理论与现代 LLM 的链式推理：
+- 先规划能提升全局最优性与步骤完整性，避免漏项与循环依赖。
+- 执行中的观察反馈支撑动态调整，使得代理在复杂环境中更稳健。
+- 与 ReAct 的差异：ReAct更强调“思考-行动-观察”的交替；Plan-and-Solve先拿到全局计划再执行，二者可互补。
+
+该范式在检索问答、工具组合、任务编排等场景表现出良好可解释性与稳定性，利于调试和审计。
+
+---
+
+<a id="prompt-role" data-alt="提示词 设计 规划 重规划"></a>
+## 提示词作用：Plan / Act / Replan
+
+在示例代码中，提示词承担三类职责：
+- 规划提示（Planner Prompt）：要求模型输出“有序、完整、可执行”的步骤清单，并用结构化模式约束格式。
+- 执行提示（Agent System Prompt）：在执行某一步时，明确上下文与预期，驱动工具选择与行动。
+- 重规划提示（Replanner Prompt）：结合已完成步骤与目标，决定“继续补充计划”或“直接向用户回复”。
+
+提示词的关键要点：
+- 明确目标与输出格式，减少歧义。
+- 将“信息充分、无多余步骤”写入约束，提升可执行性。
+- 在重规划阶段，仅保留“仍需执行”的步骤，避免重复。
+
+---
+
+<a id="limitations" data-alt="缺点 局限 适用场景"></a>
+## 缺点与局限性
+
+- 计划质量依赖模型：若初始计划不充分，后续需要频繁重规划。
+- 较长交互成本：规划、执行、观察的闭环可能增加时延与调用次数。
+- 工具选择不当：若缺乏高质量工具或检索结果，执行效果受限。
+- 状态管理复杂：需要妥善维护“已完成步骤、上下文与历史”。
+- 适用边界：对一次性、简单问题可能“过度工程”，直接回答更高效。
+
+---
+
+<a id="summary" data-alt="总结 收尾 建议"></a>
+## 总结
+
+Plan-and-Solve 以“先规划、再执行、必要时重规划”为核心，将全局策略与逐步行动结合，特别适合多步、具外部工具依赖的任务。结合 LangChain 的结构化输出与 LangGraph 的有向工作流，你可以：
+- 让模型生成清晰的步骤计划并受格式约束。
+- 在每步中调用合适工具，保留观察结果以便迭代。
+- 通过重规划节点实现动态调整，最终稳定地收敛到答案。
+
+实践建议：从简单目标入手，逐步丰富工具与状态管理；为关键节点编写可测试的提示与评估指标，持续提升计划质量与执行稳健性。
