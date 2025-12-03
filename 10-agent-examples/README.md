@@ -54,6 +54,37 @@
 - **内容**: 任务分解与状态管理，动态任务调度
 - **示例**: ToDoList Agent 模式，支持 ToDoList 的创建、查询、更新和统计操作
 
+### 11. Claude Code 式层级协作
+- **文件**: `11_claude_code_style_demo.py`
+- **内容**: Lead Researcher 动态派生子 Agent，带记忆与引用的研究循环
+- **示例**: 贴合 Claude Code 流程图的主从协作演示，包含子 Agent ReAct 与反思、Citation Agent 汇总
+
+### 12. Human-in-the-Loop（人机协同）
+- **文件**: `11_human_in_the_loop_demo.py`
+- **内容**: 工作流中断机制，Agent 执行过程中请求人类输入和反馈
+- **示例**: 使用 LangGraph 的 interrupt_before 和 MemorySaver 实现断点交互
+- **适用场景**: 人工审核、不确定性决策、需要授权的操作
+
+### 13. 智能澄清 Agent
+- **文件**: `12_clarification_agent_demo.py`
+- **内容**: 主动检测需求模糊度，生成结构化澄清问题，基于反馈调整策略
+- **示例**: Proactive Questioning + Structured Question Generation
+- **技术特点**:
+  - 自动需求模糊度检测
+  - 问题类型分类（scope/preference/constraint/context）
+  - 紧迫性评估（high/medium/low）
+  - 自适应执行策略
+
+### 14. 多轮澄清对话
+- **文件**: `13_multi_round_clarification_demo.py`
+- **内容**: 迭代式多轮对话澄清，上下文感知问题生成，动态停止条件
+- **示例**: Multi-Round Clarification + Adaptive Questioning
+- **技术特点**:
+  - 基于历史对话生成问题
+  - 自动评估需求完整度
+  - 智能停止机制（最多 3 轮）
+  - 需求整合和总结
+
 ## 🔮 进阶学习点
 
 ### 架构设计模式
@@ -83,15 +114,67 @@
 
 ### 运行示例
 ```bash
-# 运行基础推理示例
+# 基础推理模式
 python 01_react_demo.py
 
-# 运行复杂搜索示例
+# 复杂搜索模式
 python 07_language_agent_tree_search_demo.py
 
-# 运行自发现示例
+# 自发现模式
 python 08_self_discover_demo.py
+
+# 人机协同模式（交互式）
+python 11_human_in_the_loop_demo.py
+
+# 人机协同模式（自动演示）
+python 11_human_in_the_loop_demo.py --auto
+
+# 智能澄清 Agent
+python 12_clarification_agent_demo.py
+
+# 多轮澄清对话
+python 13_multi_round_clarification_demo.py
 ```
+
+## 🆕 反问机制（Clarification Mechanism）
+
+### 核心概念
+
+**反问机制**（也称为 Human-in-the-Loop 或 Interactive Clarification）是指 Agent 在执行过程中主动向用户提问以澄清需求的能力。
+
+### 三种实现模式
+
+#### 1. **Human-in-the-Loop（基础人机协同）**
+- **实现**: 使用 LangGraph 的 `interrupt_before` 机制
+- **特点**: 在预定节点暂停，等待人类输入
+- **适用**: 需要人工审核、授权的场景
+
+#### 2. **Intelligent Clarification（智能澄清）**
+- **实现**: LLM 自动检测需求模糊度 + 结构化问题生成
+- **特点**: 主动提问，问题分类（scope/preference/constraint/context）
+- **适用**: 需求分析、个性化推荐
+
+#### 3. **Multi-Round Dialogue（多轮对话）**
+- **实现**: 迭代式澄清 + 上下文感知 + 智能停止
+- **特点**: 基于历史对话深入挖掘，自动评估完整度
+- **适用**: 复杂需求分析、咨询服务
+
+### 技术对比
+
+| 特性 | Human-in-the-Loop | Intelligent Clarification | Multi-Round Dialogue |
+|------|-------------------|---------------------------|----------------------|
+| 文件 | 11_*.py | 12_*.py | 13_*.py |
+| 自动检测 | ❌ | ✅ | ✅ |
+| 结构化问题 | ❌ | ✅ | ✅ |
+| 多轮迭代 | ❌ | ❌ | ✅ |
+| 智能停止 | ❌ | ❌ | ✅ |
+| 实现复杂度 | 简单 | 中等 | 复杂 |
+
+### 使用建议
+
+- **初学者**: 从 `11_human_in_the_loop_demo.py` 开始
+- **实战应用**: 使用 `12_clarification_agent_demo.py`
+- **高级场景**: 探索 `13_multi_round_clarification_demo.py`
 
 ## 🎯 学习目标
 
@@ -101,6 +184,7 @@ python 08_self_discover_demo.py
 - 实现从简单推理到复杂多步推理的完整 Agent 系统
 - 应用搜索、反思、编译等高级 Agent 技术
 - 设计可扩展、可维护的 Agent 架构
+- **新增**: 实现智能反问和人机协同机制
 
 ## 💡 技术特点
 
