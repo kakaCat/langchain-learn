@@ -23,17 +23,17 @@ from typing_extensions import TypedDict
 
 
 def get_tools():
-    """返回 Tavily 搜索工具列表，优先官方包，其次社区版。"""
+    """返回 Tavily 搜索工具列表，优先官方包，其次社区版；失败则空工具继续。"""
     try:
         from langchain_tavily import TavilySearch
         return [TavilySearch(max_results=3)]
-    except Exception as e:
-        raise RuntimeError(
-                "无法加载 TavilySearch，请安装相关依赖并配置 TAVILY_API_KEY"
-            ) from e
-
-
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    except Exception:
+        try:
+            from langchain_community.tools.tavily_search import TavilySearchResults
+            return [TavilySearchResults(k=3)]
+        except Exception:
+            print("[warn] 无法加载 TavilySearch 工具，继续无工具模式。请检查 TAVILY_API_KEY 与依赖。")
+            return []
 TOOLS = get_tools()
 
 def load_environment():
@@ -145,7 +145,7 @@ Your objective was this:
 Your original plan was this:
 {plan}
 
-You have currently done the follow steps:
+You have currently done the following steps:
 {past_steps}
 
 Update your plan accordingly. If no more steps are needed and you can return to the user, then respond with that. Otherwise, fill out the plan. Only add steps to the plan that still NEED to be done. Do not return previously done steps as part of the plan."""
@@ -172,8 +172,11 @@ def plan_step(state: PlanExecute):
 
 
 def execute_step(state: PlanExecute):
-    """执行节点：执行当前任务，记录工具调用与输出。"""
-    plan = state["plan"]
+    """执行节点：执行当前任务，记录工具调用与输出，并维护计划进度。"""
+    plan = state.get("plan") or []
+    if not plan:
+        print("Execute Step - 计划为空，跳过执行")
+        return state
     plan_str = "\n".join(f"{i + 1}. {step}" for i, step in enumerate(plan))
     task = plan[0]
     task_formatted = f"""For the following plan:\
@@ -206,10 +209,23 @@ def execute_step(state: PlanExecute):
         print("Execute Step - 调用了工具:", ", ".join(used_tools))
     else:
         print("Execute Step - 未调用任何工具")
-    print("Execute Step - Agent 返回:", agent_response["messages"][-1].content)
+    # 提取最后一条模型消息内容，增强稳健性
+    last_content = None
+    try:
+        msgs = agent_response.get("messages", [])
+        if msgs:
+            last_content = msgs[-1].content
+    except Exception:
+        pass
+    if last_content is None:
+        last_content = str(agent_response)
+    print("Execute Step - Agent 返回:", last_content)
     past_steps = state.get("past_steps") or []
-    past_steps.append((task, agent_response["messages"][-1].content))
+    past_steps.append((task, last_content))
     state["past_steps"] = past_steps
+    # 移除已执行的第一步，保持计划前进
+    if state.get("plan"):
+        state["plan"] = state["plan"][1:]
     return state
 
 
@@ -264,7 +280,7 @@ def create_workflow():
     )
     app = workflow.compile()
     project_root = Path(__file__).resolve().parent.parent
-    output_path = project_root / "blog" / "agent_02.png"
+    output_path = project_root / "blog" / "plan.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     app.get_graph().draw_mermaid_png(output_file_path=str(output_path))
     return app
@@ -275,7 +291,7 @@ def main() -> None:
     app = create_workflow()
     initial_state = {"input": "2024 年奥运会乒乓球混合双打冠军的家乡在哪里？"}
     final_state = app.invoke(initial_state)
-    print("Response:", final_state.get("response"))
+    print("最终结果:", final_state.get("response"))
 
 if __name__ == "__main__":
     main()

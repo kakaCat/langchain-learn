@@ -7,26 +7,20 @@
 """
 
 import os
-import json
-from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field
+
 try:
     from dotenv import load_dotenv
 except Exception:
     load_dotenv = None
 
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import create_agent
-from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from typing import Literal
 
 from langgraph.graph import END, StateGraph, START
 from langgraph.graph.message import add_messages
 from typing import Annotated
 from typing_extensions import TypedDict
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import ToolMessage
 from langchain_core.output_parsers.openai_tools import PydanticToolsParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import ValidationError
@@ -36,6 +30,22 @@ from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
+
+
+
+def get_tools():
+    """返回 Tavily 搜索工具列表，优先官方包，其次社区版；失败则空工具继续。"""
+    try:
+        from langchain_tavily import TavilySearch
+        return [TavilySearch(max_results=3)]
+    except Exception:
+        try:
+            from langchain_community.tools.tavily_search import TavilySearchResults
+            return [TavilySearchResults(k=3)]
+        except Exception:
+            print("[warn] 无法加载 TavilySearch 工具，继续无工具模式。请检查 TAVILY_API_KEY 与依赖。")
+            return []
+TOOLS = get_tools()
 
 def load_environment():
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
@@ -236,23 +246,25 @@ tool_node = ToolNode(
 
 
 
-class State(TypedDict):
+class Reflexion(TypedDict):
     messages: Annotated[list, add_messages]
 
 
 def create_workflow():
     first_responder = get_first_responder()
     revisor = get_revisor()
-    workflow = StateGraph(State)
+    workflow = StateGraph(Reflexion)
     workflow.add_node("draft", first_responder.respond)
     workflow.add_node("execute_tools", tool_node)
     workflow.add_node("revise", revisor.respond)
+
+    workflow.add_edge(START, "draft")
     # draft -> execute_tools
     workflow.add_edge("draft", "execute_tools")
     # execute_tools -> revise
     workflow.add_edge("execute_tools", "revise")
     workflow.add_conditional_edges("revise", event_loop, ["execute_tools", END])
-    workflow.add_edge(START, "draft")
+
 
     app = workflow.compile()
     app.get_graph().draw_mermaid_png(output_file_path='blog/flow_01.png')
@@ -263,20 +275,7 @@ def main() -> None:
     """运行工作流并输出最终结果"""
     app = create_workflow()
 
-    # for step in app.stream(
-    #     {
-    #         "messages": [
-    #             HumanMessage(
-    #                 content="Find the current temperature in Tokyo, then, respond with a flashcard summarizing this information"
-    #             )
-    #         ]
-    #     }
-    # ):
-    #     print(step)
-    # # 初始化状态：仅需提供用户输入，其余字段由工作流填充
-    # initial_state = {"input": "用一句话解释 Plan-and-Solve 是什么？"}
-    # final_state = app.invoke(initial_state)
-    # print("Response:", step)
+
 
 if __name__ == "__main__":
     main()

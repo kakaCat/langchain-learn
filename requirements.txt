@@ -13,6 +13,9 @@ langchain-ollama>=0.1
 # 社区集成（注意：pip 包名为 langchain-community）
 langchain-community>=0.3
 
+# 搜索工具（Tavily 官方包）
+langchain-tavily>=0.3
+
 # 代理底层（create_agent 基于 LangGraph）
 langgraph>=0.2
 

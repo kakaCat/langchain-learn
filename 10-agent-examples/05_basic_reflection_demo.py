@@ -4,150 +4,162 @@
 05_basic_reflection_demo.py — LangChain v1 create_agent 版本（Basic Reflection）
 
 统一工具与 CLI。该示例强调：先给出初稿答案，再基于简短反思进行修订，输出更优的最终结果。
+https://github.com/langchain-ai/langgraph/blob/main/docs/docs/tutorials/reflection/reflection.ipynb
 """
 
 import os
-from typing import Optional
-from datetime import datetime
+from pathlib import Path
+from typing import Annotated
 
-try:
-    from dotenv import load_dotenv
-except Exception:
-    load_dotenv = None
-
-from langchain.agents import create_agent
-from langchain_core.tools import tool
+from dotenv import load_dotenv
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
-
-
-# 工具定义
-@tool
-def calculator(expression: str) -> str:
-    """计算一个简单的数学表达式，例如 "2 + 3 * 4"。"""
-    try:
-        result = eval(expression, {"__builtins__": {}}, {})
-        return str(result)
-    except Exception as e:
-        return f"计算失败: {e}"
-
-@tool
-def get_current_date(_: str = "") -> str:
-    """返回当前日期（YYYY-MM-DD）。参数忽略。"""
-    return datetime.now().strftime("%Y-%m-%d")
-
-@tool
-def search_information(query: str) -> str:
-    """占位的信息检索工具（不访问外网）。"""
-    return (
-        "[模拟搜索结果] 这是关于 '" + query + "' 的简要信息。"
-        " 在真实环境中，请接入向量数据库或 Web 检索 API。"
-    )
-
-TOOLS = [calculator, get_current_date, search_information]
+from langgraph.graph import END, StateGraph, START, add_messages
+from typing_extensions import TypedDict
 
 
 def load_environment():
-    if load_dotenv is not None:
-        try:
-            load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
-        except Exception:
-            pass
+    """加载当前目录下的 .env 配置。"""
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
-
-def get_agent(system_prompt: str, tools: list):
+# 获取配置的语言模型
+def get_llm() -> ChatOpenAI:
+    """创建并返回语言模型实例。"""
     api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODEL", "deepseek-chat")
+    model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
     base_url = os.getenv("OPENAI_BASE_URL")
     temperature = float(os.getenv("OPENAI_TEMPERATURE", "0"))
+    max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "512"))
 
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY 未设置，请在 .env 中配置有效密钥")
-    if not base_url and model.startswith("deepseek"):
-        raise ValueError("OPENAI_BASE_URL 未设置，DeepSeek 示例需配置为 https://api.deepseek.com")
-    if not model:
-        raise ValueError("OPENAI_MODEL 未设置，请指定可用模型（示例：deepseek-chat）")
+    kwargs = {
+        "model": model,
+        "api_key": api_key,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "timeout": 120,
+        "max_retries": 3,
+        "request_timeout": 120,
+        "verbose": True,
+        "base_url": base_url
+    }
 
-    llm = ChatOpenAI(
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        temperature=temperature,
-    )
+    return ChatOpenAI(**kwargs)
 
-    return create_agent(
-        model=llm,
-        tools=tools,
-        system_prompt=system_prompt,
-    )
+class BASIC_REFLECTION(TypedDict):
+    messages: Annotated[list, add_messages]
 
 
-def _extract_final_text_from_messages(messages) -> Optional[str]:
-    if not messages:
-        return None
-    last_assistant = None
-    for m in reversed(messages):
-        if isinstance(m, dict) and m.get("role") == "assistant":
-            last_assistant = m
-            break
-    msg = last_assistant or messages[-1]
-    content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                return block.get("text")
-        try:
-            return "\n".join(str(b) for b in content)
-        except Exception:
-            return None
-    return None
+def generate():
+    prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are an essay assistant tasked with writing excellent 5-paragraph essays."
+            " Generate the best essay possible for the user's request."
+            " If the user provides critique, respond with a revised version of your previous attempts.",
+        ),
+        MessagesPlaceholder(variable_name="messages"),
+    ]
+)
+    return prompt | get_llm()
+
+def reflect():
+    reflection_prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a teacher grading an essay submission. Generate critique and recommendations for the user's submission."
+            " Provide detailed recommendations, including requests for length, depth, style, etc.",
+        ),
+        MessagesPlaceholder(variable_name="messages"),
+    ]
+)
+    return reflection_prompt | get_llm()
+
+def generation_node(state: BASIC_REFLECTION) -> BASIC_REFLECTION:
+    # 使用可运行链实例并同步调用，传入 messages 映射
+    # 调试打印：生成输入消息
+    try:
+        print("[Generate] Input messages:", [(m.type, getattr(m, "content", None)) for m in state["messages"]])
+    except Exception:
+        print("[Generate] Input messages (raw):", state["messages"])
+    msg = generate().invoke({"messages": state["messages"]})
+    # 调试打印：生成输出内容
+    try:
+        print("[Generate] Output:", getattr(msg, "content", str(msg)))
+    except Exception:
+        print("[Generate] Output (raw):", msg)
+
+    state["messages"] = [msg]
+    return state
+
+
+def reflection_node(state: BASIC_REFLECTION) -> BASIC_REFLECTION:
+    # Other messages we need to adjust
+    cls_map = {"ai": HumanMessage, "human": AIMessage}
+    # First message is the original user request. We hold it the same for all nodes
+    translated = [state["messages"][0]] + [
+        cls_map[msg.type](content=msg.content) for msg in state["messages"][1:]
+    ]
+    # 调试打印：反思输入消息
+    try:
+        print("[Reflect] Input messages:", [(m.type, getattr(m, "content", None)) for m in translated])
+    except Exception:
+        print("[Reflect] Input messages (raw):", translated)
+    # 使用可运行链实例并同步调用，传入 messages 映射
+    res = reflect().invoke({"messages": translated})
+    # 调试打印：反思输出内容
+    try:
+        print("[Reflect] Output:", getattr(res, "content", str(res)))
+    except Exception:
+        print("[Reflect] Output (raw):", res)
+
+    state["messages"] = [HumanMessage(content=res.content)]
+    return state
+
+
+
+def should_continue(state: BASIC_REFLECTION):
+    msgs = state.get("messages", [])
+    msg_len = len(msgs)
+    try:
+        last = msgs[-1]
+        last_summary = (getattr(last, "type", "unknown"), getattr(last, "content", None))
+    except Exception:
+        last_summary = ("unknown", None)
+    decision = END if msg_len > 3 else "reflect"
+    print(f"[ShouldContinue] messages={msg_len}, last={last_summary}, decision={decision}")
+    return decision
+
+def create_workflow():
+    """构建并编译工作流，生成可执行 `app` 与工作流图。"""
+
+    workflow = StateGraph(BASIC_REFLECTION)
+    workflow.add_node("generate", generation_node)
+    workflow.add_node("reflect", reflection_node)
+    workflow.add_edge(START, "generate")
+    workflow.add_conditional_edges("generate", should_continue)
+    workflow.add_edge("reflect", "generate")
+
+    app = workflow.compile()
+    project_root = Path(__file__).resolve().parent.parent
+    output_path = project_root / "blog" / "plan.png"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    app.get_graph().draw_mermaid_png(output_file_path=str(output_path))
+    return app
 
 
 def main():
     load_environment()
-    agent = get_agent(
-        system_prompt=(
-            "你是一个带有自我反思能力的助理。请先给出初稿答案，"
-            "随后进行简短反思：指出可能的不足或改进点。"
-            "最后给出修订后的更优答案。必要时调用工具支撑结论。"
-        ),
-        tools=TOOLS,
-    )
-
-    print("\n=== LangChain v1 create_agent · Basic Reflection 示例 ===")
-    print("可用工具:", ", ".join(t.name for t in TOOLS))
-    print("提示: 直接输入问题，或输入 'exit' 退出。")
-
-    while True:
-        try:
-            user_input = input("\n你: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\n[退出]")
-            break
-        if not user_input:
-            continue
-        if user_input.lower() in {"exit", "quit", "q"}:
-            print("[退出]")
-            break
-
-        try:
-            result = agent.invoke({
-                "messages": [
-                    {"role": "user", "content": user_input}
-                ]
-            })
-        except Exception as e:
-            print(f"助手发生错误: {e}")
-            continue
-
-        messages = result.get("messages", [])
-        final_text = _extract_final_text_from_messages(messages)
-        if final_text:
-            print("助理:", final_text)
-        else:
-            print("[提示] 未从返回消息中提取到最终文本。完整结构如下：")
-            print(result)
+    app = create_workflow()
+    initial_state = {"messages":[
+            HumanMessage(
+                content="撰写一篇关于《小王子》的现实意义及其在现代生活中的启示的文章，要求使用中文"
+            )
+        ] }
+    final_state = app.invoke(initial_state)
+    print("最终结果:", final_state.get("messages"))
 
 
 if __name__ == "__main__":

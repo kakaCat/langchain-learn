@@ -17,7 +17,18 @@ from langchain_openai import ChatOpenAI
 from typing_extensions import TypedDict
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-
+def get_tools():
+    """返回 Tavily 搜索工具列表，优先官方包，其次社区版；失败则空工具继续。"""
+    try:
+        from langchain_tavily import TavilySearch
+        return [TavilySearch(max_results=3)]
+    except Exception:
+        try:
+            from langchain_community.tools.tavily_search import TavilySearchResults
+            return [TavilySearchResults(k=3)]
+        except Exception:
+            print("[warn] 无法加载 TavilySearch 工具，继续无工具模式。请检查 TAVILY_API_KEY 与依赖。")
+            return []
 
 def load_environment():
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
@@ -94,7 +105,13 @@ def get_plan(state: ReWOO):
 
     # Find all matches in the sample text
     matches = re.findall(regex_pattern, result.content)
-    return {"steps": matches, "plan_string": result.content}
+    # 对齐 02 示例：写入 state 并记录 past_steps
+    state["steps"] = matches
+    state["plan_string"] = result.content
+    past_steps = state.get("past_steps") or []
+    past_steps.append(("planner", result.content))
+    state["past_steps"] = past_steps
+    return state
 
 
 def _get_current_task(state: ReWOO):
@@ -123,7 +140,12 @@ def tool_execution(state: ReWOO):
     else:
         raise ValueError
     _results[step_name] = str(result)
-    return {"results": _results}
+    # 对齐 02 示例：写入 state 并记录 past_steps
+    state["results"] = _results
+    past_steps = state.get("past_steps") or []
+    past_steps.append((step_name, str(result)))
+    state["past_steps"] = past_steps
+    return state
 
 
 def solve(state: ReWOO):
@@ -149,7 +171,12 @@ Response:"""
         plan += f"Plan: {_plan}\n{step_name} = {tool}[{tool_input}]"
     prompt = solve_prompt.format(plan=plan, task=state["task"])
     result = get_llm().invoke(prompt)
-    return {"result": result.content}
+    # 对齐 02 示例：写入 state 并记录 past_steps
+    state["result"] = result.content
+    past_steps = state.get("past_steps") or []
+    past_steps.append(("solve", result.content))
+    state["past_steps"] = past_steps
+    return state
 
 def _route(state):
     _step = _get_current_task(state)
@@ -167,20 +194,22 @@ def create_workflow():
     workflow.add_node("plan", get_plan)
     workflow.add_node("tool", tool_execution)
     workflow.add_node("solve", solve)
-    workflow.add_edge("plan", "tool")
-    workflow.add_edge("solve", END)
-    workflow.add_conditional_edges("tool", _route)
+
     workflow.add_edge(START, "plan")
 
+    workflow.add_edge("plan", "tool")
+    workflow.add_conditional_edges("tool", _route)
+    workflow.add_edge("solve", END)
+
     app = workflow.compile()
-    app.get_graph().draw_mermaid_png(output_file_path='blog/flow_01.png')
+    app.get_graph().draw_mermaid_png(output_file_path='blog/rewoo.png')
     return app
 
 def main() -> None:
     load_environment()
     app = create_workflow()
     # 初始化状态：仅需提供用户输入，其余字段由工作流填充
-    initial_state = {"task": "用一句话解释 Plan-and-Solve 是什么？"}
+    initial_state = {"task": ""}
     final_state = app.invoke(initial_state)
     print("Result:", final_state.get("result"))
 

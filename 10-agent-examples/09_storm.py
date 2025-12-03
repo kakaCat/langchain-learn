@@ -9,7 +9,7 @@ STORM（Synthesis of Topic Outlines through Retrieval and Multi-perspective Ques
 - 章节写作：按大纲写作并引用来源
 
 说明：
-- 无外部搜索 API 时，使用 DuckDuckGo 轻量搜索（如不可用则降级模拟）
+- 无外部搜索 API 时，使用 Tavily 轻量搜索（如不可用则降级模拟）
 - 无 LLM API Key 时，降级为规则式/占位写作，保证可运行
 """
 
@@ -62,31 +62,50 @@ def get_llm() -> Optional[ChatOpenAI]:
 
 
 # =========================
-# 轻量检索（DuckDuckGo）
+# 轻量检索（Tavily）
 # =========================
 
-def ddg_search(query: str, k: int = 5) -> List[Dict[str, str]]:
-    """使用 duckduckgo_search 进行轻量检索；不可用时返回占位结果。
+def tavily_search(query: str, k: int = 5) -> List[Dict[str, str]]:
+    """使用 Tavily 进行轻量检索；不可用时返回占位结果。
     返回项包含 title / link / snippet。
     """
     try:
-        from duckduckgo_search import DDGS
-        with DDGS() as ddgs:
-            results = []
-            for r in ddgs.text(query, max_results=k):
-                results.append({
-                    "title": r.get("title") or "",
-                    "link": r.get("href") or r.get("link") or "",
-                    "snippet": r.get("body") or r.get("snippet") or "",
-                })
-            return results
+        # 优先尝试官方包
+        from langchain_tavily import TavilySearch
+        tavily_tool = TavilySearch(max_results=k)
+        results = tavily_tool.invoke({"query": query})
+        
+        # 转换结果格式以保持兼容性
+        formatted_results = []
+        for r in results:
+            formatted_results.append({
+                "title": r.get("title") or "",
+                "link": r.get("url") or r.get("link") or "",
+                "snippet": r.get("content") or r.get("snippet") or r.get("body") or "",
+            })
+        return formatted_results
     except Exception:
-        # 降级占位：避免运行时失败
-        return [{
-            "title": "占位搜索结果",
-            "link": "https://example.com",
-            "snippet": f"无法使用实时搜索。这里是关于‘{query}’的占位信息。",
-        }]
+        try:
+            # 降级到社区版
+            from langchain_community.tools.tavily_search import TavilySearchResults
+            tavily_tool = TavilySearchResults(k=k)
+            results = tavily_tool.invoke({"query": query})
+            
+            formatted_results = []
+            for r in results:
+                formatted_results.append({
+                    "title": r.get("title") or "",
+                    "link": r.get("url") or r.get("link") or "",
+                    "snippet": r.get("content") or r.get("snippet") or r.get("body") or "",
+                })
+            return formatted_results
+        except Exception:
+            # 最终降级占位：避免运行时失败
+            return [{
+                "title": "占位搜索结果",
+                "link": "https://example.com",
+                "snippet": f"无法使用实时搜索。这里是关于'{query}'的占位信息。",
+            }]
 
 
 # =========================
@@ -117,11 +136,7 @@ class StormWriteState(BaseModel):
 def discover_perspectives_node(state: StormWriteState) -> StormWriteState:
     """视角发现：基于主题提出 3-5 个多维视角。"""
     llm = get_llm()
-    if llm is None:
-        # 降级默认视角
-        state.perspectives = ["基本事实", "历史脉络", "关键应用", "挑战与争议", "未来趋势"]
-        return state
-
+ 
     prompt = f"""
 你是一名资深百科写作者。请针对主题《{state.topic}》提出 4-6 个互补的写作视角。
 要求：
@@ -181,7 +196,7 @@ def retrieve_node(state: StormWriteState) -> StormWriteState:
     # 找到未回答的问题
     pending = [item for item in state.qa if not item.answer]
     for item in pending:
-        results = ddg_search(f"{state.topic} {item.question}", k=4)
+        results = tavily_search(f"{state.topic} {item.question}", k=4)
         sources = [r.get("link", "") for r in results if r.get("link")]
         snippets = [r.get("snippet", "") for r in results if r.get("snippet")]
         item.sources = sources
@@ -296,14 +311,19 @@ def create_storm_workflow():
     """创建 STORM 写作工作流。"""
     workflow = StateGraph(StormWriteState)
 
+    # 主题方向
     workflow.add_node("discover", discover_perspectives_node)
+    # 资料
     workflow.add_node("question", questioning_node)
+    # 补充资料
     workflow.add_node("retrieve", retrieve_node)
+    # 生成大纲
     workflow.add_node("outline", outline_node)
+    # 生成文章
     workflow.add_node("write", writing_node)
 
+    # 流程起点
     workflow.set_entry_point("discover")
-
     workflow.add_edge("discover", "question")
     workflow.add_edge("question", "retrieve")
     workflow.add_conditional_edges(

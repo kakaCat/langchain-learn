@@ -7,25 +7,16 @@
 """
 
 import os
+from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
-try:
-    from dotenv import load_dotenv
-except Exception:
-    load_dotenv = None
-
-from langchain.agents import create_agent
-from langchain_core.tools import tool
+from dotenv import load_dotenv
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from typing import Optional
+from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
-from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-
-from langgraph.graph import END, START, StateGraph
 
 def load_environment():
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
@@ -54,6 +45,8 @@ def get_llm() -> ChatOpenAI:
 
 
 # Inline Self-Discover prompts (Hub 不可用时的占位模板)
+# 你是一名自我探索选择器。请阅读任务及可用推理模块，然后选出最有帮助的模块。
+# 任务：{task_description}n可用推理模块：可用推理模块：{reasoning_modules}返回一个简洁的选中模块编号或名称列表和一个简短的理由
 select_prompt = ChatPromptTemplate.from_messages([
     (
         "system",
@@ -65,6 +58,8 @@ select_prompt = ChatPromptTemplate.from_messages([
     ),
 ])
 
+#你是一名自我探索适配器。根据任务描述和选中的推理模块，适配这些模块以适应特定任务和上下文。
+#任务：{task_description}\n选中的推理模块：\n{selected_modules}\n可用推理模块：\n{reasoning_modules}\n\n返回一个适配后的列表，每个模块包含简要说明。
 adapt_prompt = ChatPromptTemplate.from_messages([
     (
         "system",
@@ -76,6 +71,8 @@ adapt_prompt = ChatPromptTemplate.from_messages([
     ),
 ])
 
+#你是一名结构化器。根据适配后的推理模块，生成一个清晰的推理结构。
+#任务：{task_description}\n适配后的推理模块：\n{adapted_modules}\n\n返回一个编号计划（1.，2.，3.，...），描述推理工作流程。
 structured_prompt = ChatPromptTemplate.from_messages([
     (
         "system",
@@ -87,6 +84,8 @@ structured_prompt = ChatPromptTemplate.from_messages([
     ),
 ])
 
+#你是一名推理器。根据提供的推理结构，详细而简洁地回答任务。
+#任务：{task_description}\n推理结构：\n{reasoning_structure}\n\n返回最终答案在3-6句话内。
 reasoning_prompt = ChatPromptTemplate.from_messages([
     (
         "system",
@@ -98,33 +97,43 @@ reasoning_prompt = ChatPromptTemplate.from_messages([
     ),
 ])
 
-
-def select(inputs):
-    select_chain = select_prompt | get_llm() | StrOutputParser()
-    return {"selected_modules": select_chain.invoke(inputs)}
-
-
-def adapt(inputs):
-    adapt_chain = adapt_prompt | get_llm() | StrOutputParser()
-    return {"adapted_modules": adapt_chain.invoke(inputs)}
-
-
-def structure(inputs):
-    structure_chain = structured_prompt | get_llm() | StrOutputParser()
-    return {"reasoning_structure": structure_chain.invoke(inputs)}
-
-
-def reason(inputs):
-    reasoning_chain = reasoning_prompt | get_llm() | StrOutputParser()
-    return {"answer": reasoning_chain.invoke(inputs)}
-
 class SelfDiscoverState(TypedDict):
-    reasoning_modules: str
-    task_description: str
-    selected_modules: Optional[str]
-    adapted_modules: Optional[str]
-    reasoning_structure: Optional[str]
-    answer: Optional[str]
+    reasoning_modules: str  # 推理模块列表
+    task_description: str  # 任务描述
+    selected_modules: Optional[str]  # 选中的推理模块
+    adapted_modules: Optional[str]  # 适配后的推理模块
+    reasoning_structure: Optional[str]  # 推理结构
+    answer: Optional[str]  # 最终答案
+
+def select(state: SelfDiscoverState):
+    print("[select] 开始选择推理模块...")
+    select_chain = select_prompt | get_llm() | StrOutputParser()
+    state["selected_modules"] = select_chain.invoke(state)
+    print(f"[select] 已选择推理模块: {state['selected_modules']}")
+    return state
+
+def adapt(state: SelfDiscoverState):
+    print("[adapt] 开始适配推理模块...")
+    adapt_chain = adapt_prompt | get_llm() | StrOutputParser()
+    state["adapted_modules"] = adapt_chain.invoke(state)
+    print(f"[adapt] 已适配推理模块: {state['adapted_modules']}")
+    return state
+
+def structure(state: SelfDiscoverState):
+    print("[structure] 开始构建推理结构...")
+    structure_chain = structured_prompt | get_llm() | StrOutputParser()
+    state["reasoning_structure"] = structure_chain.invoke(state)
+    print(f"[structure] 已构建推理结构: {state['reasoning_structure']}")
+    return state
+
+def reason(state: SelfDiscoverState):
+    print("[reason] 开始执行推理...")
+    reasoning_chain = reasoning_prompt | get_llm() | StrOutputParser()
+    state["answer"] = reasoning_chain.invoke(state)
+    print(f"[reason] 推理完成，答案: {state['answer']}")
+    return state
+
+
 
 def create_workflow():
 
@@ -133,6 +142,7 @@ def create_workflow():
     workflow.add_node("adapt", adapt)
     workflow.add_node("structure", structure)
     workflow.add_node("reason", reason)
+
     workflow.add_edge(START, "select")
     workflow.add_edge("select", "adapt")
     workflow.add_edge("adapt", "structure")
@@ -143,9 +153,52 @@ def create_workflow():
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
-    app.get_graph().draw_mermaid_png(output_file_path='blog/flow_01.png')
+    project_root = Path(__file__).resolve().parent.parent
+    output_path = project_root / "blog" / "self-discover.png"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    app.get_graph().draw_mermaid_png(output_file_path=str(output_path))
     return app
 
+
+# 我该如何设计实验来帮助解决这个问题？
+# 列出解决该问题的思路清单，将其逐一应用到问题中，观察是否能取得进展。
+# （原文注释：已标注 #，暂不翻译）
+# 我该如何简化这个问题，使其更容易解决？
+# 这个问题背后的核心假设是什么？
+# 每种解决方案的潜在风险和弊端是什么？
+# 关于这个问题，有哪些不同的视角或观点？
+# 这个问题及其解决方案的长期影响是什么？
+# 我该如何将这个问题拆解为更小、更易处理的部分？
+# 批判性思维：该思维方式要求从不同角度分析问题、质疑假设，并评估现有证据或信息。其核心在于逻辑推理、基于证据的决策，以及识别思考过程中潜在的偏见或漏洞。
+# 尝试运用创造性思维，提出跳出常规的思路来解决问题。探索非传统解决方案，突破传统界限思考，激发想象力与原创性。
+# （原文注释：已标注 #，暂不翻译）
+# 运用系统思维：将问题视为更大系统的一部分，理解各要素间的相互联系。核心是识别影响问题的根本原因、反馈循环及相互依赖关系，并制定针对整个系统的整体性解决方案。
+# 运用风险分析：评估不同解决方案或方法相关的潜在风险、不确定性与权衡取舍。重点是分析成功或失败的潜在后果及可能性，基于对风险与收益的平衡分析做出明智决策。
+# （原文注释：已标注 #，暂不翻译）
+# 需要解决的核心议题或问题是什么？
+# 导致该问题的根本原因或影响因素是什么？
+# 此前是否尝试过任何潜在的解决方案或策略？若有，结果如何？从中获得了哪些经验教训？
+# 解决这个问题可能会遇到哪些潜在障碍或挑战？
+# 是否有任何相关数据或信息能为理解该问题提供启发？若有，可获取哪些数据源？如何分析这些数据？
+# 该问题是否直接影响某些利益相关者或个人？他们的视角和需求是什么？
+# 有效解决该问题需要哪些资源（资金、人力、技术等）？
+# 如何衡量解决问题的进展或成功与否？
+# 可使用哪些指标或衡量标准？
+# 该问题是需要特定专业知识或技能的技术性 / 实操性问题，还是更偏向概念性 / 理论性的问题？
+# 该问题是否受物理条件限制，例如资源有限、基础设施不足或空间受限？
+# 该问题是否与人类行为相关，例如涉及社会、文化或心理层面的议题？
+# 该问题是否涉及决策或规划，需要在不确定环境下或存在目标冲突时做出选择？
+# 该问题是否属于分析类问题，需要运用数据分析、建模或优化技术？
+# 该问题是否属于设计类挑战，需要创造性解决方案与创新思维？
+# 该问题是否需要解决系统性或结构性问题，而非仅处理个别案例？
+# 该问题是否具有时间敏感性或紧迫性，需要立即关注和采取行动？
+# 针对这类问题描述（problem specification），通常会产生哪些类型的解决方案？
+# 结合问题描述与当前最佳解决方案，推测可能存在的其他解决方案。
+# 假设当前的最佳解决方案完全错误，还有哪些思考该问题描述的方式？
+# 基于你对这类问题描述的了解，修改当前最佳解决方案的最佳方式是什么？
+# 暂不考虑当前最佳解决方案，为该问题设计一个全新的解决方案。
+# （原文注释：已标注 #，暂不翻译）
+# 制定一个逐步实施计划，并用清晰的表述和解释将其落地。
 def main() -> None:
     load_environment()
     """运行工作流并输出最终结果"""
@@ -194,19 +247,20 @@ def main() -> None:
 ]
 
 
-    task_example = "Lisa has 10 apples. She gives 3 apples to her friend and then buys 5 more apples from the store. How many apples does Lisa have now?"
+    task_example = "莉萨有 10 个苹果。她给了朋友 3 个苹果，之后又从商店买了 5 个苹果。莉萨现在有多少个苹果？"
 
-    task_example = """This SVG path element <path d="M 55.57,80.69 L 57.38,65.80 M 57.38,65.80 L 48.90,57.46 M 48.90,57.46 L
-    45.58,47.78 M 45.58,47.78 L 53.25,36.07 L 66.29,48.90 L 78.69,61.09 L 55.57,80.69"/> draws a:
-    (A) circle (B) heptagon (C) hexagon (D) kite (E) line (F) octagon (G) pentagon(H) rectangle (I) sector (J) triangle"""
+    # task_example = """This SVG path element <path d="M 55.57,80.69 L 57.38,65.80 M 57.38,65.80 L 48.90,57.46 M 48.90,57.46 L
+    # 45.58,47.78 M 45.58,47.78 L 53.25,36.07 L 66.29,48.90 L 78.69,61.09 L 55.57,80.69"/> draws a:
+    # (A) circle (B) heptagon (C) hexagon (D) kite (E) line (F) octagon (G) pentagon(H) rectangle (I) sector (J) triangle"""
 
     reasoning_modules_str = "\n".join(reasoning_modules)
-
-    for s in app.stream(
-        {"task_description": task_example, "reasoning_modules": reasoning_modules_str}
-    ):
-        print(s)
-
+    initial_state = {"task_description": task_example, "reasoning_modules": reasoning_modules_str}
+    final_state = app.invoke(initial_state)
+    print("最终结果:", final_state.get("answer"))
+    # for s in app.stream(
+    #     initial_state
+    # ):
+    #     print("最终结果:", s.get("answer"))
 
 if __name__ == "__main__":
     main()
