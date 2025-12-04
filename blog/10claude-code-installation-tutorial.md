@@ -185,21 +185,15 @@ node -v  # 确认 > 18
 
 #### 全局安装 Claude Code
 ```bash powershell
-
 npm install -g @anthropic-ai/claude-code --registry=https://registry.npmmirror.com
-
 ```
 #### 版本校验
 ```bash powershell
-
 claude --version
-
 ```
 #### 更新 Claude Code
 ```bash powershell
-
 claude update
-
 ```
 
 #### 配置 Claude Code
@@ -236,9 +230,7 @@ claude update
 ###### 启动 Claude Code
 
 ```bash powershell
-
 claude
-
 ```
 首次运行会提示设置 style，可以根据自己的喜好设置
 
