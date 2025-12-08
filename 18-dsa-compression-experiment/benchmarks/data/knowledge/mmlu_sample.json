@@ -1,0 +1,15 @@
+[
+  {
+    "name": "MMLU - General Knowledge (Sample)",
+    "description": "Massive Multitask Language Understanding - tests general world knowledge retention.",
+    "history": [
+      {"role": "user", "content": "Let's talk about astronomy. What is the largest planet in our solar system?"},
+      {"role": "ai", "content": "<think>Topic: Astronomy. Question: Largest planet. Answer: Jupiter. Strategy: Direct answer.</think> Jupiter is the largest planet."},
+      {"role": "user", "content": "What is it mainly composed of?"},
+      {"role": "ai", "content": "<think>Subject: Jupiter. Composition: Hydrogen and Helium. Strategy: Scientific fact.</think> It is mainly composed of hydrogen and helium."}
+    ],
+    "test_input": "Does it have a solid surface like Earth?",
+    "expected_style": "No, because it's a Gas Giant (referencing previous context of H/He composition).",
+    "negative_style": "Yes, or failing to connect 'it' to Jupiter."
+  }
+]

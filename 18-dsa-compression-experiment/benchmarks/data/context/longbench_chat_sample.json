@@ -1,0 +1,15 @@
+[
+  {
+    "name": "LongBench - Multi-Turn Chat (Sample)",
+    "description": "Simulated long conversation from LongBench Chat dataset focusing on context retention.",
+    "history": [
+      {"role": "user", "content": "I'm planning a trip to Japan. I want to visit Tokyo, Kyoto, and Osaka. I have 10 days."},
+      {"role": "ai", "content": "<think>User wants a 10-day Japan itinerary (Tokyo, Kyoto, Osaka). Strategy: Provide a balanced schedule.</think> Great choice! A 10-day trip is perfect. I suggest: 3 days Tokyo, 4 days Kyoto, 3 days Osaka."},
+      {"role": "user", "content": "I love anime and history. Any specific spots?"},
+      {"role": "ai", "content": "<think>User likes anime (Akihabara) and history (Kyoto temples). Strategy: Tailor recommendations.</think> For anime: Akihabara in Tokyo. For history: Kinkaku-ji and Fushimi Inari in Kyoto."}
+    ],
+    "test_input": "Which city should I buy my anime figures in based on your suggestion?",
+    "expected_style": "Directly reference the previous recommendation (Tokyo/Akihabara).",
+    "negative_style": "Generic answer without referencing the specific context of Akihabara in Tokyo."
+  }
+]

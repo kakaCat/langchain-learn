@@ -1,0 +1,15 @@
+[
+  {
+    "name": "GSM8K - Multi-Step Logic (Sample)",
+    "description": "Grade School Math 8K dataset focusing on multi-step reasoning. Tests if compressed context retains intermediate logic.",
+    "history": [
+      {"role": "user", "content": "I have 5 apples. I buy 3 more. Then I eat 2. How many do I have?"},
+      {"role": "ai", "content": "<think>Start: 5. Buy 3 -> 5+3=8. Eat 2 -> 8-2=6. Strategy: Step-by-step calculation.</think> You have 6 apples."},
+      {"role": "user", "content": "If I double the remaining apples, how many will I have?"},
+      {"role": "ai", "content": "<think>Remaining: 6. Double means *2. 6*2=12. Strategy: Use previous result.</think> You will have 12 apples."}
+    ],
+    "test_input": "Wait, what if I had eaten 4 instead of 2 initially? Recalculate everything.",
+    "expected_style": "Step-by-step correction: (5+3)-4=4, then 4*2=8.",
+    "negative_style": "Incorrect calculation or forgetting the doubling step."
+  }
+]

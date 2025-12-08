@@ -1,0 +1,12 @@
+# DeepSeek-R1 Agent V2 Dependencies
+
+# Core LangChain
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-ollama>=0.0.1
+
+# Utilities
+python-dotenv>=1.0.0
+
+# Optional (for Python REPL tool)
+# langchain-experimental>=0.0.40

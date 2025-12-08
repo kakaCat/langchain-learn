@@ -1,0 +1,15 @@
+[
+  {
+    "name": "HumanEval - Python Coding (Sample)",
+    "description": "Coding tasks testing logic and syntax preservation.",
+    "history": [
+      {"role": "user", "content": "I need a Python function to calculate Fibonacci numbers."},
+      {"role": "ai", "content": "<think>Task: Python Fibonacci. Strategy: Recursive or iterative. Suggest iterative for efficiency.</think> Here is an efficient version:\ndef fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a"},
+      {"role": "user", "content": "Can you add type hints to it?"},
+      {"role": "ai", "content": "<think>Task: Add type hints. Strategy: Modify previous code.</think> Sure:\ndef fib(n: int) -> int:\n    ..."}
+    ],
+    "test_input": "Now convert this function to be a generator.",
+    "expected_style": "yield a instead of return a. Maintain type hints if possible.",
+    "negative_style": "Generating a completely new unrelated function or forgetting it's about Fibonacci."
+  }
+]
