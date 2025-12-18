@@ -43,7 +43,7 @@ from langchain_tavily import TavilySearch
 
 
 def load_environment():
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 # 获取配置的语言模型
 def get_llm() -> ChatOpenAI:

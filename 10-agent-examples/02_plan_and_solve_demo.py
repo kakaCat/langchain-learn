@@ -38,7 +38,7 @@ TOOLS = get_tools()
 
 def load_environment():
     """加载当前目录下的 .env 配置。"""
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 # 获取配置的语言模型
 def get_llm() -> ChatOpenAI:

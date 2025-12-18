@@ -20,7 +20,7 @@ def load_environment() -> None:
     try:
         env_path = os.path.join(os.path.dirname(__file__), ".env")
         print(f"正在加载环境变量文件: {env_path}")
-        load_dotenv(dotenv_path=env_path, override=False)
+        load_dotenv(dotenv_path=env_path, override=True)
         print("环境变量加载成功")
     except FileNotFoundError:
         print("警告: .env文件未找到，将使用系统环境变量")

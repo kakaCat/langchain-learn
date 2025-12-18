@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from dotenv import load_dotenv
 
 # 加载环境变量
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 # 导入主程序（使用 importlib 处理数字开头的模块名）
 import importlib.util

@@ -49,7 +49,7 @@ TOOLS = [calculator, get_current_date, search_information]
 def load_environment():
     if load_dotenv is not None:
         try:
-            load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+            load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
         except Exception:
             pass
 

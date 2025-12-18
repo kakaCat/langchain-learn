@@ -53,7 +53,7 @@ def check_env_vars() -> List[Tuple[str, bool, str]]:
     if env_exists:
         from dotenv import load_dotenv
 
-        load_dotenv(dotenv_path=env_path, override=False)
+        load_dotenv(dotenv_path=env_path, override=True)
 
     # 检查 LLM 配置
     provider = os.getenv("LLM_PROVIDER", "").lower()
@@ -86,7 +86,7 @@ def check_llm_connection() -> Tuple[bool, str]:
         from dotenv import load_dotenv
 
         load_dotenv(
-            dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False
+            dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True
         )
 
         provider = os.getenv("LLM_PROVIDER", "").lower()
