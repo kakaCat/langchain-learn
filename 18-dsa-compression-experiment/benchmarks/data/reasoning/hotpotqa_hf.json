@@ -1,0 +1,87 @@
+[
+  {
+    "name": "HotpotQA_0",
+    "description": "Multi-hop reasoning task requiring information synthesis.",
+    "history": [
+      {
+        "role": "user",
+        "content": "Here is some background information:\nTitle: Ed Wood (film)\nContent: Ed Wood is a 1994 American biographical period comedy-drama film directed and produced by Tim Burton, and starring Johnny Depp as cult filmmaker Ed Wood. The film concerns the period in Wood's life when he made his best-known films as well as his relationship with actor Bela Lugosi, played by Martin Landau. Sarah Jessica Parker, Patricia Arquette, Jeffrey Jones, Lisa Marie, and Bill Murray are among the supporting cast.\n\nTitle: Scott Derrickson\nContent: Scott Derrickson (born July 16, 1966) is an American director, screenwriter and producer. He lives in Los Angeles, California. He is best known for directing horror films such as \"Sinister\", \"The Exorcism of Emily Rose\", and \"Deliver Us From Evil\", as well as the 2016 Marvel Cinematic Universe installment, \"Doctor Strange.\"\n\nTitle: Woodson, Arkansas\nContent: Woodson is a census-designated place (CDP) in Pulaski County, Arkansas, in the United States. Its population was 403 at the 2010 census. It is part of the Little Rock–North Little Rock–Conway Metropolitan Statistical Area. Woodson and its accompanying Woodson Lake and Wood Hollow are the namesake for Ed Wood Sr., a prominent plantation owner, trader, and businessman at the turn of the 20th century. Woodson is adjacent to the Wood Plantation, the largest of the plantations own by Ed Wood Sr.\n\nBased on this, answer the following question: Were Scott Derrickson and Ed Wood of the same nationality?"
+      },
+      {
+        "role": "ai",
+        "content": "<think>Analyzing multiple documents. Synthesizing facts.</think> yes"
+      }
+    ],
+    "test_input": "What specific facts from the text led you to this conclusion?",
+    "expected_style": "Cite specific facts or sentences from the provided background context.",
+    "negative_style": "Vague answer or using outside knowledge not in the text."
+  },
+  {
+    "name": "HotpotQA_1",
+    "description": "Multi-hop reasoning task requiring information synthesis.",
+    "history": [
+      {
+        "role": "user",
+        "content": "Here is some background information:\nTitle: Meet Corliss Archer\nContent: Meet Corliss Archer, a program from radio's Golden Age, ran from January 7, 1943 to September 30, 1956. Although it was CBS's answer to NBC's popular \"A Date with Judy\", it was also broadcast by NBC in 1948 as a summer replacement for \"The Bob Hope Show\". From October 3, 1952 to June 26, 1953, it aired on ABC, finally returning to CBS. Despite the program's long run, fewer than 24 episodes are known to exist.\n\nTitle: Shirley Temple\nContent: Shirley Temple Black (April 23, 1928 – February 10, 2014) was an American actress, singer, dancer, businesswoman, and diplomat who was Hollywood's number one box-office draw as a child actress from 1935 to 1938. As an adult, she was named United States ambassador to Ghana and to Czechoslovakia and also served as Chief of Protocol of the United States.\n\nTitle: Janet Waldo\nContent: Janet Marie Waldo (February 4, 1920 – June 12, 2016) was an American radio and voice actress. She is best known in animation for voicing Judy Jetson, Nancy in \"Shazzan\", Penelope Pitstop, and Josie in \"Josie and the Pussycats\", and on radio as the title character in \"Meet Corliss Archer\".\n\nBased on this, answer the following question: What government position was held by the woman who portrayed Corliss Archer in the film Kiss and Tell?"
+      },
+      {
+        "role": "ai",
+        "content": "<think>Analyzing multiple documents. Synthesizing facts.</think> Chief of Protocol"
+      }
+    ],
+    "test_input": "What specific facts from the text led you to this conclusion?",
+    "expected_style": "Cite specific facts or sentences from the provided background context.",
+    "negative_style": "Vague answer or using outside knowledge not in the text."
+  },
+  {
+    "name": "HotpotQA_2",
+    "description": "Multi-hop reasoning task requiring information synthesis.",
+    "history": [
+      {
+        "role": "user",
+        "content": "Here is some background information:\nTitle: Andre Norton Award\nContent: The Andre Norton Award for Young Adult Science Fiction and Fantasy is an annual award presented by the Science Fiction and Fantasy Writers of America (SFWA) to the author of the best young adult or middle grade science fiction or fantasy book published in the United States in the preceding year. It is named to honor prolific science fiction and fantasy author Andre Norton (1912–2005), and it was established by then SFWA president Catherine Asaro and the SFWA Young Adult Fiction committee and announced on February 20, 2005. Any published young adult or middle grade science fiction or fantasy novel is eligible for the prize, including graphic novels. There is no limit on word count. The award is presented along with the Nebula Awards and follows the same rules for nominations and voting; as the awards are separate, works may be simultaneously nominated for both the Andre Norton award and a Nebula Award.\n\nTitle: Victoria Hanley\nContent: Victoria Hanley is an American young adult fantasy novelist. Her first three books, \"The Seer And The Sword\", \"The Healer's Keep\" and \"The Light Of The Oracle\" are companion books to one another. Her newest book (released March 2012) is the sequel of a series, called \"Indigo Magic\", published by Egmont USA. She's also published two non-fiction books through Cotton Wood Press; called \"Seize the Story: A Handbook For Teens Who Like To Write\", and \"Wild Ink: A Grownups Guide To Writing Fiction For Teens\".\n\nTitle: The Hork-Bajir Chronicles\nContent: The Hork-Bajir Chronicles is the second companion book to the \"Animorphs\" series, written by K. A. Applegate. With respect to continuity within the series, it takes place before book #23, \"The Pretender\", although the events told in the story occur between the time of \"The Ellimist Chronicles\" and \"The Andalite Chronicles\". The book is introduced by Tobias, who flies to the valley of the free Hork-Bajir, where Jara Hamee tells him the story of how the Yeerks enslaved the Hork-Bajir, and how Aldrea, an Andalite, and her companion, Dak Hamee, a Hork-Bajir, tried to save their world from the invasion. Jara Hamee's story is narrated from the points of view of Aldrea, Dak Hamee, and Esplin 9466, alternating in similar fashion to the \"Megamorphs\" books.\n\nBased on this, answer the following question: What science fantasy young adult series, told in first person, has a set of companion books narrating the stories of enslaved worlds and alien species?"
+      },
+      {
+        "role": "ai",
+        "content": "<think>Analyzing multiple documents. Synthesizing facts.</think> Animorphs"
+      }
+    ],
+    "test_input": "What specific facts from the text led you to this conclusion?",
+    "expected_style": "Cite specific facts or sentences from the provided background context.",
+    "negative_style": "Vague answer or using outside knowledge not in the text."
+  },
+  {
+    "name": "HotpotQA_3",
+    "description": "Multi-hop reasoning task requiring information synthesis.",
+    "history": [
+      {
+        "role": "user",
+        "content": "Here is some background information:\nTitle: Esma Sultan (daughter of Abdülaziz)\nContent: Esma Sultan (21 March 1873 – 7 May 1899) was an Ottoman princess, the daughter of Sultan Abdülaziz and his wife Gevheri Kadın, herself the daughter of Salih Bey Svatnba. She was the half-sister of Abdülmecid II, the last Caliph of the Muslim world.\n\nTitle: Djamaâ el Kebir\nContent: The Great Mosque of Algiers (Arabic: الجامع الكبير‎ ‎ , \"Jemaa Kebir\") or “Djama’a al-Kebir” (meaning Great Mosque) is a mosque in Algiers, Algeria, located very close to Algiers Harbor. An inscription on the minbar (منبر) or the pulpit testifies to fact that the mosque was built in 1097. It is also known by several other names such as Grand Mosque d'Alger, Djamaa al-Kebir, El Kebir Mosque and Jami Masjid. It is one of the few remaining examples of Almoravid architecture. It is the oldest mosque in Algiers and is said to be the oldest mosque in Algeria after Sidi Okba Mosque. It was built under sultan Ali ibn Yusuf. Its minaret dates from 1332 (1324 in some sources) and was built by the Ziyyanid Sultan of Tlemcen. The gallery at the outside of the mosque was built in 1840. Its construction was a consequence of a complete reconstruction of the street by the French.\n\nTitle: Küçük Hüseyin Pasha\nContent: Küçük Hüseyin Pasha (1757 – 7 December 1803), also known as Tayazade Damat Küçük Hüseyin Pasha, was an Ottoman statesman and admiral who was Kapudan Pasha (Grand Admiral of the Ottoman Navy) from 11 March 1792 to 7 December 1803. He was a \"damat\" (\"bridegroom\") to the Ottoman dynasty after he married an Ottoman princess, Esma Sultan.\n\nBased on this, answer the following question: Are the Laleli Mosque and Esma Sultan Mansion located in the same neighborhood?"
+      },
+      {
+        "role": "ai",
+        "content": "<think>Analyzing multiple documents. Synthesizing facts.</think> no"
+      }
+    ],
+    "test_input": "What specific facts from the text led you to this conclusion?",
+    "expected_style": "Cite specific facts or sentences from the provided background context.",
+    "negative_style": "Vague answer or using outside knowledge not in the text."
+  },
+  {
+    "name": "HotpotQA_4",
+    "description": "Multi-hop reasoning task requiring information synthesis.",
+    "history": [
+      {
+        "role": "user",
+        "content": "Here is some background information:\nTitle: Just Another Romantic Wrestling Comedy\nContent: Just Another Romantic Wrestling Comedy is a 2006 film starring April Hunter and Joanie Laurer. This Romantic comedy film was premiered at New Jersey and New York City on December 1, 2006 and was released on DVD in the United States and the United Kingdom on April 17, 2007. After the film's DVD release \"Just Another Romantic Wrestling Comedy\" won an \"Honorable Mention\" award at the New Jersey International Festival awards. The release is being handled by \"Victory Multimedia\".\n\nTitle: Kingston Morning\nContent: Kingston Morning is Dave Eggar's 4th solo release recorded in Brooklyn, New York; Kingston, Jamaica; and Big Stone Gap, Virginia; and released by Domo Records. \"Itsbynne Reel\" was nominated at the 53rd Grammy Awards for \"Best Instrumental Arrangement\".\n\nTitle: Nola (film)\nContent: Nola is a 2003 American romantic comedy film written and directed by Alan Hruska. It depicts the struggle of a young woman trying to survive in New York City while looking for her birth father. It premiered in New York City on July 23, 2004.\n\nBased on this, answer the following question: The director of the romantic comedy \"Big Stone Gap\" is based in what New York city?"
+      },
+      {
+        "role": "ai",
+        "content": "<think>Analyzing multiple documents. Synthesizing facts.</think> Greenwich Village, New York City"
+      }
+    ],
+    "test_input": "What specific facts from the text led you to this conclusion?",
+    "expected_style": "Cite specific facts or sentences from the provided background context.",
+    "negative_style": "Vague answer or using outside knowledge not in the text."
+  }
+]

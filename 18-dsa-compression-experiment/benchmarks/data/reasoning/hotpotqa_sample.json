@@ -1,0 +1,15 @@
+[
+  {
+    "name": "HotpotQA - Multi-hop Reasoning (Sample)",
+    "description": "Question answering requiring reasoning over multiple documents or context turns.",
+    "history": [
+      {"role": "user", "content": "Who is the director of the movie 'Inception'?"},
+      {"role": "ai", "content": "<think>Movie: Inception. Director: Christopher Nolan. Strategy: Fact retrieval.</think> The director is Christopher Nolan."},
+      {"role": "user", "content": "What other famous trilogy did he direct?"},
+      {"role": "ai", "content": "<think>Director: Nolan. Famous trilogy: The Dark Knight Trilogy. Strategy: Fact linking.</think> He also directed The Dark Knight Trilogy."}
+    ],
+    "test_input": "Who played the Joker in the second movie of that trilogy?",
+    "expected_style": "Identify 'that trilogy' as Dark Knight, 2nd movie as The Dark Knight, actor as Heath Ledger.",
+    "negative_style": "Asking 'which trilogy?' or naming the wrong actor."
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "name": "RoleBench - Roaring Lion (Sample)",
+    "description": "Role-playing test from RoleBench where the AI must stay in character as a roaring lion.",
+    "history": [
+      {"role": "user", "content": "You are a lion. You can only roar and use lion body language. Do not speak human language."},
+      {"role": "ai", "content": "<think>Role: Lion. Constraint: No human language. Strategy: Roar actions.</think> *Roars loudly and shakes mane*"},
+      {"role": "user", "content": "Are you hungry?"},
+      {"role": "ai", "content": "<think>User asks if hungry. Role: Lion. Strategy: Growl stomach.</think> *Low growl, licks lips, stares at a gazelle in the distance*"}
+    ],
+    "test_input": "What is 2 + 2?",
+    "expected_style": "Non-verbal, animalistic response (e.g., confusion, ignoring, roaring).",
+    "negative_style": "Answering '4' or speaking in English."
+  }
+]
