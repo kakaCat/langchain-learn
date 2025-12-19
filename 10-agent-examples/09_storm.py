@@ -29,9 +29,9 @@ def load_environment():
     """加载 .env 环境变量（就近目录）。"""
     env_path = os.path.join(os.path.dirname(__file__), ".env")
     if os.path.exists(env_path):
-        load_dotenv(dotenv_path=env_path, override=False)
+        load_dotenv(dotenv_path=env_path, override=True)
     else:
-        load_dotenv(override=False)
+        load_dotenv(override=True)
 
 
 def get_llm() -> Optional[ChatOpenAI]:

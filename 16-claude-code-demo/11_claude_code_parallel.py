@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 
 def load_environment() -> None:
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 
 def get_llm(model: Optional[str] = None, temperature: float = 0.2) -> object:

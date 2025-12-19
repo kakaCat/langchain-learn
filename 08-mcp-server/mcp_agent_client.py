@@ -174,7 +174,7 @@ class MCPClient:
 # ============================
 def load_environment() -> None:
     """加载环境变量（支持当前目录 .env）"""
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 
 def get_llm() -> ChatOpenAI:

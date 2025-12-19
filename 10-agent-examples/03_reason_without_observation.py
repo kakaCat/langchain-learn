@@ -31,7 +31,7 @@ def get_tools():
             return []
 
 def load_environment():
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 def get_llm() -> ChatOpenAI:
 

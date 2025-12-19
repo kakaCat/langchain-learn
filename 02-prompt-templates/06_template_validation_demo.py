@@ -15,7 +15,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.prompts.base import BasePromptTemplate
 
 # 从当前模块目录加载 .env，避免在仓库根运行时找不到配置
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 @dataclass
 class ValidationResult:

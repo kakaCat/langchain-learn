@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 
 # 从当前模块目录加载 .env
 def load_environment() -> None:
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 
 def get_llm() -> ChatOpenAI:

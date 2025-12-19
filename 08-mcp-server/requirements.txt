@@ -1,3 +1,3 @@
 # 占位依赖（后续按需添加）
 # 示例：langchain, mcp
-websocket-client
+websocket-client>=1.9.0
