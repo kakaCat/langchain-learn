@@ -21,7 +21,11 @@ from typing_extensions import TypedDict
 
 def load_environment():
     """加载当前目录下的 .env 配置。"""
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    load_dotenv(dotenv_path=env_path, override=True)  # 使用 override=True 确保覆盖系统环境变量
+    print(f"✅ 已加载配置文件: {env_path}")
+    print(f"   BASE_URL: {os.getenv('OPENAI_BASE_URL')}")
+    print(f"   MODEL: {os.getenv('OPENAI_MODEL')}\n")
 
 # 获取配置的语言模型
 def get_llm() -> ChatOpenAI:
@@ -143,10 +147,25 @@ def create_workflow():
     workflow.add_edge("reflect", "generate")
 
     app = workflow.compile()
+
     project_root = Path(__file__).resolve().parent.parent
-    output_path = project_root / "blog" / "plan.png"
+    output_path = project_root / "blog" / "basic_reflection.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    app.get_graph().draw_mermaid_png(output_file_path=str(output_path))
+    try:
+        print("正在生成流程图...")
+        img_bytes = app.get_graph().draw_mermaid_png()
+        with open(output_path, "wb") as f:
+            f.write(img_bytes)
+        print(f"✅ 流程图已保存至: {output_path}")
+    except Exception as e:
+        print(f"生成流程图图片失败: {e}")
+        # Fallback: save mermaid code
+        mermaid_path = output_path.with_suffix(".mmd")
+        with open(mermaid_path, "w") as f:
+            f.write(app.get_graph().draw_mermaid())
+        print(f"⚠️ 已保存 Mermaid 代码至: {mermaid_path} (可使用 https://mermaid.live 查看)")
+  
+
     return app
 
 

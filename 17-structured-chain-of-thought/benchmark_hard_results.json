@@ -1,0 +1,222 @@
+[
+  {
+    "task_id": "Hard_Logic_Cheryls_Birthday",
+    "task_index": 3,
+    "difficulty": "hard",
+    "category": "logic",
+    "question": "Albert and Bernard just met Cheryl. \"When is your birthday?\" Albert asked Cheryl. Cheryl thought for a moment and said, \"I won't tell you, but I'll give you some clues.\" She wrote down a list of 10 dates:\nMay 15, May 16, May 19\nJune 17, June 18\nJuly 14, July 16\nAugust 14, August 15, August 17\n\n\"My birthday is one of these,\" she said. Then Cheryl whispered in Albert's ear the month, and only the month. To Bernard, she whispered the day, and only the day.\n\nAlbert: \"I don't know when your birthday is, but I know Bernard doesn't know either.\"\nBernard: \"I didn't know originally, but now I do.\"\nAlbert: \"Well, now I know too!\"\n\nWhen is Cheryl's birthday?",
+    "gold_answer": "July 16. Albert knows Bernard doesn't know, so the month cannot be May or June (which have unique days 18 and 19). Bernard then knows, so the day must be unique among the remaining dates (July 14, July 16, Aug 14, Aug 15, Aug 17). Days 14, 15, 17 appear multiple times, so it must be 16. Albert then knows the month is July.",
+    "baseline": {
+      "answer": "Cheryl's birthday is July 16.\n\n### Explanation:\n1. **Albert's first statement**: He knows the month and says Bernard doesn't know the birthday. This means the month cannot contain a unique day (18 or 19), eliminating May and June. Only July and August remain.\n2. **Bernard's statement**: He knows the day and now deduces the birthday. Since the day cannot be 14 (which appears in both July and August), it must be 15, 16, or 17. Each of these days now corresponds to a unique month in the remaining set: 15 → August, 16 → July, 17 → August.\n3. **Albert's second statement**: He now knows the birthday. If the month were August, Albert would be unsure between August 15 and August 17. Since he knows, the month must be July, leaving only July 16.\n\nThus, the logic consistently leads to July 16.",
+      "time": 60.742061138153076,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "July 16",
+      "time": 159.4916431903839,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  },
+  {
+    "task_id": "Hard_Math_Monty_Hall_Extended",
+    "task_index": 4,
+    "difficulty": "hard",
+    "category": "math",
+    "question": "You're on a game show with 5 doors. Behind one door is a car, behind the other four are goats. You pick door #1. The host, who knows where the car is, opens 3 doors (not #1, not the car) revealing 3 goats. You now have a choice: stick with door #1, or switch to the other unopened door. What should you do, and what is your probability of winning if you follow the optimal strategy?",
+    "gold_answer": "You should switch. Initial probability of picking the car: 1/5. Probability the car is behind one of the other 4 doors: 4/5. When the host opens 3 doors with goats, the 4/5 probability concentrates on the remaining unopened door (the host cannot open the door with the car). So switching gives you 4/5 probability of winning, while staying gives you 1/5.",
+    "baseline": {
+      "answer": "The optimal strategy is to switch to the other unopened door. The probability of winning the car by switching is \\( \\frac{4}{5} \\).\n\n### Explanation:\nInitially, there are 5 doors, and the car is equally likely to be behind any one of them. After you pick door #1, the probability that the car is behind your door is \\( \\frac{1}{5} \\), and the probability that it is behind one of the other four doors is \\( \\frac{4}{5} \\).\n\nThe host, who knows where the car is, opens 3 doors that are not #1 and not the car, revealing goats. This action gives you additional information:\n- If the car is behind one of the other four doors (probability \\( \\frac{4}{5} \\)), the host is forced to leave that door closed and open all other goat doors among those four. Thus, the remaining unopened door must contain the car.\n- If the car is behind door #1 (probability \\( \\frac{1}{5} \\)), the host randomly chooses 3 of the 4 goat doors to open, and the remaining unopened door is also a goat.\n\nTherefore, switching wins with probability \\( \\frac{4}{5} \\), while sticking with door #1 wins with only \\( \\frac{1}{5} \\).",
+      "time": 78.34491777420044,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "Switch to the other unopened door. The probability of winning is 4/5 (or 80%).",
+      "time": 281.98339104652405,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  },
+  {
+    "task_id": "Hard_Math_Number_Theory",
+    "task_index": 5,
+    "difficulty": "hard",
+    "category": "math",
+    "question": "Find the smallest positive integer n such that n/2 is a perfect square, n/3 is a perfect cube, and n/5 is a perfect fifth power.",
+    "gold_answer": "n = 2^15 × 3^10 × 5^6 = 2,592,000,000,000,000. For n/2 to be a perfect square, n must have the form 2^(2a+1) × other. For n/3 to be a perfect cube, n must have the form 3^(3b+1) × other. For n/5 to be a perfect fifth power, n must have the form 5^(5c+1) × other. Taking minimum exponents: 2^15 × 3^10 × 5^6.",
+    "baseline": {
+      "answer": "The smallest positive integer \\(n\\) satisfying the conditions must be of the form \\(n = 2^A \\cdot 3^B \\cdot 5^C\\), with exponents determined as follows:\n\n- \\(n/2\\) is a perfect square \\(\\Rightarrow\\) \\(A\\) odd, \\(B\\) even, \\(C\\) even.\n- \\(n/3\\) is a perfect cube \\(\\Rightarrow\\) \\(A\\) multiple of 3, \\(B \\equiv 1 \\pmod{3}\\), \\(C\\) multiple of 3.\n- \\(n/5\\) is a perfect fifth power \\(\\Rightarrow\\) \\(A\\) multiple of 5, \\(B\\) multiple of 5, \\(C \\equiv 1 \\pmod{5}\\).\n\nSolving these congruences yields \\(A = 15\\), \\(B = 10\\), \\(C = 6\\). Thus,  \n\\[\nn = 2^{15} \\cdot 3^{10} \\cdot 5^{6} = 30233088000000.\n\\]  \nVerification:\n- \\(n/2 = (3888000)^2\\),\n- \\(n/3 = (21600)^3\\),\n- \\(n/5 = (360)^5\\).\n\n\\boxed{30233088000000}",
+      "time": 143.37736010551453,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "n = 30233088000000",
+      "time": 306.49230909347534,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  },
+  {
+    "task_id": "Hard_Math_Combinatorics",
+    "task_index": 6,
+    "difficulty": "hard",
+    "category": "math",
+    "question": "In how many ways can you tile a 2×n rectangle with 1×2 dominoes?",
+    "gold_answer": "F(n+1), where F is the Fibonacci sequence. Let a(n) be the number of ways to tile a 2×n rectangle. Either the first column has a vertical domino (leaving a 2×(n-1) rectangle, giving a(n-1) ways), or it has two horizontal dominoes (leaving a 2×(n-2) rectangle, giving a(n-2) ways). So a(n) = a(n-1) + a(n-2), with a(0)=1, a(1)=1. This is the Fibonacci sequence.",
+    "baseline": {
+      "answer": "The number of tilings of a \\(2 \\times n\\) rectangle with \\(1 \\times 2\\) dominoes is equal to the \\((n+1)\\)-th Fibonacci number \\(F_{n+1}\\), where the Fibonacci sequence is defined by \\(F_1 = 1\\), \\(F_2 = 1\\), and \\(F_{k} = F_{k-1} + F_{k-2}\\) for \\(k \\ge 3\\).\n\nEquivalently, if \\(a_n\\) denotes the number of tilings, then it satisfies the recurrence:\n\\[\na_n = a_{n-1} + a_{n-2} \\quad \\text{for } n \\ge 2,\n\\]\nwith initial conditions \\(a_0 = 1\\) and \\(a_1 = 1\\).\n\nThis yields the sequence:\n\\[\na_0 = 1,\\ a_1 = 1,\\ a_2 = 2,\\ a_3 = 3,\\ a_4 = 5,\\ a_5 = 8,\\ a_6 = 13,\\ \\dots\n\\]\n\nA closed-form expression is given by Binet's formula:\n\\[\na_n = \\frac{\\varphi^{n+1} - \\psi^{n+1}}{\\sqrt{5}},\n\\]\nwhere \\(\\varphi = \\frac{1 + \\sqrt{5}}{2}\\) and \\(\\psi = \\frac{1 - \\sqrt{5}}{2}\\).",
+      "time": 45.61592698097229,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "覆盖一个2×n矩形的方法数由斐波那契数列给出。设f(n)为方法数，则f(0)=1, f(1)=1，且对n ≥ 2有f(n) = f(n-1) + f(n-2)。即f(n) = F_{n+1}，其中斐波那契数列定义为F_0 = 0, F_1 = 1, F_{k} = F_{k-1} + F_{k-2}。",
+      "time": 143.66728329658508,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  },
+  {
+    "task_id": "Hard_Reasoning_Towers_Of_Hanoi",
+    "task_index": 7,
+    "difficulty": "medium",
+    "category": "reasoning",
+    "question": "You have the Tower of Hanoi puzzle with 10 disks. What is the minimum number of moves required to solve it? And if you make one move per second, how long would it take?",
+    "gold_answer": "2^10 - 1 = 1,023 moves. At one move per second, it would take 1,023 seconds = 17 minutes and 3 seconds. The formula for n disks is 2^n - 1 moves.",
+    "baseline": {
+      "answer": "The minimum number of moves required to solve the Tower of Hanoi with 10 disks is \\(2^{10} - 1 = 1023\\).\n\nAt a rate of one move per second, it would take 1023 seconds, which is equivalent to 17 minutes and 3 seconds.",
+      "time": 17.508330821990967,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "最少移动次数为 1023 次。以每秒移动一次计算，需要 1023 秒，约 17 分钟 3 秒。",
+      "time": 106.86334800720215,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  },
+  {
+    "task_id": "Hard_Reasoning_Game_Strategy",
+    "task_index": 8,
+    "difficulty": "hard",
+    "category": "reasoning",
+    "question": "Two players play a game with a pile of 100 stones. On each turn, a player must remove 1, 2, or 3 stones. The player who takes the last stone wins. You go first. What is your winning strategy?",
+    "gold_answer": "Take 3 stones on your first move (leaving 97). Then, whatever your opponent takes (1, 2, or 3), you take enough to make the total taken in that round equal to 4. This way you always leave a multiple of 4 stones for your opponent. Eventually you'll leave them with 4 stones, and whatever they take (1, 2, or 3), you can take the rest and win. Initial move: 100 mod 4 = 0, so take (4 - 0) mod 4 = 0... actually, 100 = 4×25, so you want to leave 96 stones (take 4). Then always respond to keep the remaining stones as a multiple of 4.",
+    "baseline": {
+      "answer": "In this game, the winning strategy revolves around leaving your opponent with a number of stones that is a multiple of 4. When it’s your opponent’s turn and the pile is a multiple of 4 (like 4, 8, 12, …), any move they make (taking 1, 2, or 3 stones) will leave a number that is not a multiple of 4. You can then respond by taking the appropriate number of stones (4 minus their move) to return the pile to a multiple of 4. Repeating this process eventually leaves your opponent with exactly 4 stones on their turn: no matter what they take, you can take the remaining stones and win.\n\nHowever, since the game starts with 100 stones—a multiple of 4—the player who goes first is at a disadvantage. If your opponent plays optimally, they can adopt the strategy described above: after your move, they will always take 4 minus the number you took, ensuring the pile remains a multiple of 4 after their turn. This means you will eventually face 4 stones on your turn, and your opponent will win.\n\nTherefore, if both players play perfectly, you **cannot guarantee a win** as the first player. Your best chance is to hope your opponent makes a mistake. If they ever fail to leave a multiple of 4 for you, you should immediately take control by leaving a multiple of 4 for them on your next turn, and then continue the optimal strategy to secure the win.\n\nIn summary:\n- The optimal strategy is to always leave a multiple of 4 stones for your opponent.\n- With 100 stones, the second player can force a win by following this strategy.\n- As the first player, you have no guaranteed winning strategy against perfect play, but you should be ready to exploit any mistakes by adopting the multiple-of-4 rule from that point onward.",
+      "time": 211.2560999393463,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "There is no winning strategy for you as the first player because the initial pile of 100 stones is a multiple of 4. If your opponent plays optimally (always leaving a multiple of 4 stones after their turn), you will lose. However, if your opponent makes a mistake and leaves a number of stones that is not a multiple of 4, you can win by always leaving a multiple of 4 stones after your turn (by taking 4 minus the number your opponent just took, if possible).",
+      "time": 198.9128761291504,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  },
+  {
+    "task_id": "Hard_Reasoning_Geometry_Area",
+    "task_index": 9,
+    "difficulty": "medium",
+    "category": "reasoning",
+    "question": "A circle is inscribed in a square. Then a smaller square is inscribed in the circle. What is the ratio of the area of the larger square to the area of the smaller square?",
+    "gold_answer": "2:1. Let the large square have side length a. The inscribed circle has diameter a, so radius a/2. The smaller square inscribed in this circle has diagonal equal to the circle's diameter (a). If the small square has side length b, then b√2 = a, so b = a/√2. Area ratio = a² / (a/√2)² = a² / (a²/2) = 2.",
+    "baseline": {
+      "answer": "The side length of the larger square is equal to the diameter of the inscribed circle. Let this side length be \\(S\\). Then the circle has diameter \\(S\\) and radius \\(S/2\\).\n\nThe smaller square is inscribed in the same circle, so its diagonal equals the diameter of the circle, which is \\(S\\). If the side length of the smaller square is \\(s\\), then its diagonal is \\(s\\sqrt{2}\\). Thus, \\(s\\sqrt{2} = S\\), so \\(s = S/\\sqrt{2}\\).\n\nThe area of the larger square is \\(S^2\\), and the area of the smaller square is \\(s^2 = (S/\\sqrt{2})^2 = S^2/2\\).\n\nTherefore, the ratio of the area of the larger square to the area of the smaller square is:\n\\[\n\\frac{S^2}{S^2/2} = 2.\n\\]\n\n\\[\n\\boxed{2}\n\\]",
+      "time": 22.04764199256897,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "2",
+      "time": 110.39504098892212,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  },
+  {
+    "task_id": "Hard_Paradox_Birthday_Extended",
+    "task_index": 10,
+    "difficulty": "medium",
+    "category": "probability",
+    "question": "In a room of 30 people, what is the approximate probability that at least two people share the same birthday (ignoring leap years)? Is it closer to 30%, 50%, 70%, or 90%?",
+    "gold_answer": "Approximately 70% (70.6% to be exact). This is the famous birthday paradox. P(at least 2 share) = 1 - P(all different) = 1 - (365/365 × 364/365 × 363/365 × ... × 336/365) ≈ 0.706. The answer is closer to 70%.",
+    "baseline": {
+      "answer": "The probability that at least two people in a group of 30 share the same birthday is approximately 70%. This is a well-known result from the birthday problem, where even with just 23 people the probability exceeds 50%. For 30 people, the exact probability is about 70.6%, making 70% the closest among the given options.",
+      "time": 16.528512001037598,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "概率约为70%，最接近选项中的70%。",
+      "time": 106.17863917350769,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  },
+  {
+    "task_id": "Hard_Paradox_Simpsons",
+    "task_index": 11,
+    "difficulty": "hard",
+    "category": "statistics",
+    "question": "Hospital A has a success rate of 90% for small surgeries (900 successes out of 1000) and 80% for large surgeries (800 successes out of 1000). Hospital B has a success rate of 85% for small surgeries (85 successes out of 100) and 95% for large surgeries (95 successes out of 100). Which hospital has the better overall success rate?",
+    "gold_answer": "Hospital A has a better overall success rate (1700/2000 = 85%) compared to Hospital B (180/200 = 90%). Wait, B is higher! This is Simpson's Paradox. Hospital B actually has a higher overall rate (90%) than Hospital A (85%), even though A has a better rate for both small and large surgeries individually. This is because B performs more of the easier small surgeries proportionally.",
+    "baseline": {
+      "answer": "Hospital A has an overall success rate of 85% (1700 successes out of 2000 surgeries), while Hospital B has an overall success rate of 90% (180 successes out of 200 surgeries). Therefore, Hospital B has the better overall success rate.",
+      "time": 20.672115087509155,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "医院B的整体手术成功率更高，为90%，而医院A为85%。",
+      "time": 110.81882071495056,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  },
+  {
+    "task_id": "Hard_Paradox_Two_Children",
+    "task_index": 12,
+    "difficulty": "hard",
+    "category": "probability",
+    "question": "Mr. Smith has two children. At least one of them is a boy. What is the probability that both children are boys?",
+    "gold_answer": "1/3. The possible combinations for two children are: BB, BG, GB, GG (where order matters: first/second child). We know 'at least one boy', so GG is eliminated. That leaves BB, BG, GB. Only 1 out of these 3 has both boys, so probability is 1/3. (Note: This assumes the information 'at least one is a boy' was obtained without reference to birth order. If we knew 'the eldest is a boy', the answer would be 1/2.)",
+    "baseline": {
+      "answer": "The sample space for the genders of two children, assuming equal probability and independence, consists of four equally likely outcomes: BB, BG, GB, GG. Given that at least one child is a boy, the outcome GG is eliminated. The remaining outcomes are BB, BG, and GB. Among these, only BB corresponds to both children being boys. Therefore, the probability that both children are boys is \\(\\frac{1}{3}\\).\n\n\\boxed{\\dfrac{1}{3}}",
+      "time": 13.110496997833252,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    },
+    "v2_5": {
+      "answer": "概率为 1/3。",
+      "time": 97.9340569972992,
+      "correct": true,
+      "error": null,
+      "timeout": false
+    }
+  }
+]

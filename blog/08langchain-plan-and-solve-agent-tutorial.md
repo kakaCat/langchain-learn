@@ -24,7 +24,7 @@ tags:
   - Planning
   - LLM
 author: "langchain-learn"
-date: "2025-10-25"
+date: "2025-12-16"
 lang: "zh-CN"
 canonical: "/blog/langchain-plan-and-solve-agent-tutorial"
 audience: "中级 / 具备Python基础和LLM应用经验的AI工程师"
@@ -75,7 +75,6 @@ qa_intents:
 ### 本页摘要
 
 *   模式定义：先生成多步计划，再按步执行并观察重规划，适合复杂、多步骤与工具依赖的任务。
-*   与 ReAct 的差异：ReAct强调“思考-行动-观察”交替；Plan‑and‑Solve先拿到全局计划，二者互补。
 *   三节点闭环：Planner（JSON步骤）→ Agent（执行与工具调用）→ Replanner（返回答案或续步）。
 *   环境与依赖：统一使用 `pip install -r requirements.txt`；`.env` 包含 `OPENAI_*` 与 `TAVILY_API_KEY`。
 *   工具降级策略：优先 `langchain-tavily`，其次 `langchain_community`，失败时进入无工具模式继续执行。
@@ -90,12 +89,12 @@ qa_intents:
 
 同一需求在复杂度上可能截然不同。用“拍黄瓜”对比：
 
-*   复杂问题：要“做一道拍黄瓜菜”，需要先拟定可执行的步骤，再逐步完成：
+*   复杂问题（Plan-and-Solve）：要“做一道拍黄瓜菜”，需要先拟定可执行的步骤，再逐步完成：
     1.  准备食材（黄瓜、蒜、醋、酱油、香油等）
     2.  清洗与处理（拍、切）
     3.  调味拌匀（按口味调整）
     4.  品尝观察，必要时微调口味
-*   简单指令：只做“拍一下黄瓜”，属于单步、无依赖，直接执行即可。
+*   简单指令（ReAct）：只做“拍一下黄瓜”，属于单步、无依赖，直接执行即可。
 
 因此：简单指令适合 ReAct 或一次工具调用；复杂问题更适合 Plan‑and‑Solve——先规划、再执行，并在每步依据观察必要时重规划。
 
