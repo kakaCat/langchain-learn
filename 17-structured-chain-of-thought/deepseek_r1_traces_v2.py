@@ -15,34 +15,76 @@ Key Improvements over V1:
 """
 
 import os
+import signal
+import functools
 from typing import Literal, Dict, Any, Optional
 from dotenv import load_dotenv
 
 from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
+
+
+# 超时异常类
+class StageTimeoutError(Exception):
+    """Stage execution timeout exception"""
+    pass
+
+
+# 超时装饰器
+def with_timeout(seconds=120):
+    """
+    为 Stage 方法添加超时保护
+
+    Args:
+        seconds: 超时时间（秒）,默认 120 秒（2 分钟）
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            def timeout_handler(signum, frame):
+                raise StageTimeoutError(f"{func.__name__} exceeded {seconds} seconds")
+
+            # 设置超时信号
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(seconds)
+
+            try:
+                result = func(*args, **kwargs)
+                signal.alarm(0)  # 取消超时
+                return result
+            except StageTimeoutError:
+                signal.alarm(0)
+                # 超时时返回简化的默认响应
+                stage_name = func.__name__.replace("_stage", "Stage ").replace("_", " ")
+                print(f"\n⏱️ {stage_name} 超时 ({seconds}s)，使用简化响应")
+                return "<answer>继续处理（超时简化）</answer>"
+            finally:
+                signal.signal(signal.SIGALRM, old_handler)
+
+        return wrapper
+    return decorator
 
 # Memory 支持（兼容新旧版本）
 try:
     from langchain.memory import ConversationBufferMemory
 except ImportError:
-    from langchain_community.chat_message_histories import ChatMessageHistory
-    from langchain_core.memory import BaseMemory
-    # 简化版本的 Memory 实现
-    class ConversationBufferMemory(BaseMemory):
+    # 完全独立的 Memory 实现，不依赖任何 langchain 基类
+    class ConversationBufferMemory:
         def __init__(self, return_messages=True, memory_key="chat_history"):
-            self.chat_history = ChatMessageHistory()
+            self.messages = []
             self.return_messages = return_messages
             self.memory_key = memory_key
 
         def load_memory_variables(self, inputs):
-            return {self.memory_key: self.chat_history.messages}
+            return {self.memory_key: self.messages}
 
         def save_context(self, inputs, outputs):
-            self.chat_history.add_user_message(str(inputs))
-            self.chat_history.add_ai_message(str(outputs))
+            self.messages.append({"role": "user", "content": str(inputs)})
+            self.messages.append({"role": "assistant", "content": str(outputs)})
 
         def clear(self):
-            self.chat_history.clear()
+            self.messages = []
 
 # 工具支持（可选）
 try:
@@ -73,27 +115,48 @@ from parsers import ThinkTagParser
 load_dotenv()
 
 
-def get_llm(model: Optional[str] = None, temperature: float = 0.2) -> ChatOllama:
+def get_llm(model: Optional[str] = None, temperature: float = 0.2):
     """
-    创建并配置 LLM 实例
+    创建并配置 LLM 实例 (支持 DeepSeek API 或 Ollama)
 
     Args:
-        model: 模型名称，默认从环境变量读取或使用 deepseek-r1:32b
+        model: 模型名称，默认从环境变量读取
         temperature: 温度参数，越低越确定性
 
     Returns:
-        ChatOllama 实例
+        Chat LLM 实例
     """
-    model_name = model or os.getenv("OLLAMA_MODEL", "deepseek-r1:32b")
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    use_backend = os.getenv("USE_BACKEND", "ollama")
 
-    print(f"正在使用模型: {model_name} (URL: {base_url})")
+    if use_backend == "deepseek_api":
+        # 使用 DeepSeek 官方 API
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+        model_name = model or os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
 
-    return ChatOllama(
-        model=model_name,
-        base_url=base_url,
-        temperature=temperature
-    )
+        if not api_key:
+            raise ValueError("使用 DeepSeek API 需要设置 DEEPSEEK_API_KEY 环境变量")
+
+        print(f"正在使用 DeepSeek API: {model_name} (URL: {base_url})")
+
+        return ChatOpenAI(
+            model=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=temperature
+        )
+    else:
+        # 使用本地 Ollama
+        model_name = model or os.getenv("OLLAMA_MODEL", "deepseek-r1:32b")
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+        print(f"正在使用 Ollama 本地模型: {model_name} (URL: {base_url})")
+
+        return ChatOllama(
+            model=model_name,
+            base_url=base_url,
+            temperature=temperature
+        )
 
 
 class DeepSeekR1AgentV2:
@@ -244,7 +307,9 @@ class DeepSeekR1AgentV2:
         if verbose:
             print(f"\n{'='*60}")
             print(f"输入: {user_input}")
-            print(f"模型: {self.llm.model}")
+            # 兼容 ChatOllama (使用 .model) 和 ChatOpenAI (使用 .model_name)
+            model_name = getattr(self.llm, 'model', None) or getattr(self.llm, 'model_name', 'unknown')
+            print(f"模型: {model_name}")
 
         # 1. 分类或使用指定模式
         if mode is None:
@@ -427,6 +492,7 @@ class DeepSeekR1AgentV2:
 
         return final_output
 
+    @with_timeout(seconds=120)  # Stage 1 最多 2 分钟
     def _stage1_problem_definition(self, user_input: str, verbose: bool = True) -> str:
         """
         阶段 1: 问题定义
@@ -444,6 +510,7 @@ class DeepSeekR1AgentV2:
 
         return output
 
+    @with_timeout(seconds=120)  # Stage 2 最多 2 分钟
     def _stage2_bloom_with_tools(self, user_input: str, stage1_output: str, verbose: bool = True) -> str:
         """
         阶段 2: 路径探索（带工具支持）
@@ -491,6 +558,7 @@ class DeepSeekR1AgentV2:
 
         return output
 
+    @with_timeout(seconds=120)  # Stage 3 最多 2 分钟（关键阶段，容易超时）
     def _stage3_validation_not_devil(self, user_input: str, stage1_output: str, stage2_output: str, verbose: bool = True) -> str:
         """
         阶段 3: 验证（非魔鬼代言人）
@@ -534,6 +602,7 @@ class DeepSeekR1AgentV2:
 
         return output
 
+    @with_timeout(seconds=120)  # Stage 4 最多 2 分钟
     def _stage4_final_decision(self, user_input: str, stage3_validation: str, verbose: bool = True) -> str:
         """
         阶段 4: 最终决策
