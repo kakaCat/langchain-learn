@@ -14,6 +14,20 @@ from enum import Enum
 from datetime import datetime, timedelta
 import re
 
+# LangChain imports
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+
+# Pydantic imports - 兼容不同版本
+try:
+    from langchain_core.pydantic_v1 import BaseModel, Field
+except ImportError:
+    try:
+        from pydantic.v1 import BaseModel, Field
+    except ImportError:
+        from pydantic import BaseModel, Field
+
 
 class CustomerIntent(Enum):
     """客户意图枚举"""
@@ -60,6 +74,18 @@ class IntentAnalysis:
     suggested_actions: List[str]
 
 
+# Pydantic 模型用于 LLM 输出结构化
+class IntentAnalysisOutput(BaseModel):
+    """意图分析输出模型"""
+    intent: str = Field(description="客户意图：inquiry(咨询), complaint(投诉), support(技术支持), order(订单), payment(支付), refund(退款), general(一般问题)")
+    confidence: float = Field(description="置信度，范围0-1", ge=0.0, le=1.0)
+    entities: Dict[str, Any] = Field(description="提取的实体信息，如订单号、产品名称、金额等")
+    sentiment: str = Field(description="情感分析：positive(积极), neutral(中性), negative(消极)")
+    urgency_level: str = Field(description="紧急程度：low(低), medium(中), high(高)")
+    reasoning: str = Field(description="分析推理过程")
+    suggested_actions: List[str] = Field(description="建议的处理行动")
+
+
 @dataclass
 class ConversationContext:
     """对话上下文"""
@@ -88,9 +114,18 @@ class SystemResponse:
 
 
 class IntentRecognizer:
-    """意图识别器 (LangChain 应用)"""
-    
-    def __init__(self):
+    """意图识别器 (LangChain 应用) - 使用 LLM 进行意图识别"""
+
+    def __init__(self, use_llm: bool = True):
+        """
+        初始化意图识别器
+
+        Args:
+            use_llm: 是否使用 LLM 进行意图识别，默认为 True。设置为 False 则使用基于规则的方法
+        """
+        self.use_llm = use_llm
+
+        # 始终初始化规则相关的属性，作为备用方案
         self.intent_patterns = {
             CustomerIntent.INQUIRY: [
                 r"请问.*", r"咨询.*", r"了解.*", r"想问.*"
@@ -105,38 +140,136 @@ class IntentRecognizer:
                 r"订单.*", r"下单.*", r"购买.*", r"发货.*", r"物流.*"
             ],
             CustomerIntent.PAYMENT: [
-                r"支付.*", r"付款.*", r"费用.*", r"价格.*", r"退款.*"
+                r"支付.*", r"付款.*", r"费用.*", r"价格.*"
             ],
             CustomerIntent.REFUND: [
                 r"退款.*", r"退货.*", r"取消.*", r"撤销.*"
             ]
         }
-        
+
         self.sentiment_keywords = {
             "positive": ["满意", "不错", "很好", "感谢", "谢谢"],
             "negative": ["不满意", "糟糕", "差劲", "生气", "投诉"],
             "urgent": ["紧急", "立刻", "马上", "尽快", "着急"]
         }
-    
+
+        if self.use_llm:
+            try:
+                # 初始化 LLM
+                self.llm = ChatOpenAI(
+                    model="gpt-4o-mini",
+                    temperature=0.1,  # 低温度保证输出稳定
+                    api_key=os.getenv("OPENAI_API_KEY")
+                )
+
+                # 创建输出解析器
+                self.parser = JsonOutputParser(pydantic_object=IntentAnalysisOutput)
+
+                # 创建提示模板
+                self.prompt = ChatPromptTemplate.from_messages([
+                    ("system", """你是一个专业的客服意图分析助手。你的任图是分析客户消息，识别其意图、情感和紧急程度。
+
+请仔细分析客户消息，提取以下信息：
+
+1. **意图分类**（必须从以下选项中选择）：
+   - inquiry: 一般咨询、询问信息
+   - complaint: 投诉、抱怨、不满
+   - support: 技术支持、故障报修、使用帮助
+   - order: 订单查询、物流追踪、发货问题
+   - payment: 支付问题、付款失败、价格咨询
+   - refund: 退款、退货、取消订单
+   - general: 其他一般性问题
+
+2. **置信度**：你对意图判断的确定程度（0-1之间的浮点数）
+
+3. **实体提取**：从消息中提取关键信息，如：
+   - order_number: 订单号
+   - product_name: 产品名称
+   - amount: 金额（数字）
+   - date: 日期
+   - 其他相关信息
+
+4. **情感分析**（必须从以下选项中选择）：
+   - positive: 积极、满意、友好
+   - neutral: 中性、平和
+   - negative: 消极、不满、愤怒
+
+5. **紧急程度**（必须从以下选项中选择）：
+   - low: 不紧急，可以稍后处理
+   - medium: 需要及时关注
+   - high: 紧急，需要立即处理
+
+6. **推理过程**：简要说明你的分析依据
+
+7. **建议行动**：基于分析结果，建议采取的处理措施
+
+{format_instructions}"""),
+                    ("human", "客户消息：{customer_message}")
+                ])
+
+                # 创建处理链
+                self.chain = self.prompt | self.llm | self.parser
+
+            except Exception as e:
+                print(f"LLM 初始化失败: {e}，将使用规则方法")
+                self.use_llm = False
+
     def analyze_intent(self, message: CustomerMessage) -> IntentAnalysis:
         """分析客户意图"""
+        if self.use_llm:
+            return self._analyze_intent_with_llm(message)
+        else:
+            return self._analyze_intent_with_rules(message)
+
+    def _analyze_intent_with_llm(self, message: CustomerMessage) -> IntentAnalysis:
+        """使用 LLM 分析意图"""
+        try:
+            # 调用 LLM 链
+            result = self.chain.invoke({
+                "customer_message": message.content,
+                "format_instructions": self.parser.get_format_instructions()
+            })
+
+            # 转换为 IntentAnalysis 对象
+            intent_str = result.get("intent", "general")
+            try:
+                intent = CustomerIntent(intent_str)
+            except ValueError:
+                intent = CustomerIntent.GENERAL
+
+            return IntentAnalysis(
+                intent=intent,
+                confidence=result.get("confidence", 0.5),
+                entities=result.get("entities", {}),
+                sentiment=result.get("sentiment", "neutral"),
+                urgency_level=result.get("urgency_level", "low"),
+                suggested_actions=result.get("suggested_actions", [])
+            )
+
+        except Exception as e:
+            print(f"LLM 意图识别失败: {e}，使用规则回退")
+            # 如果 LLM 失败，回退到基于规则的方法
+            return self._analyze_intent_with_rules(message)
+
+    def _analyze_intent_with_rules(self, message: CustomerMessage) -> IntentAnalysis:
+        """使用规则分析意图（备用方案）"""
         content = message.content.lower()
-        
+
         # 意图识别
         intent, confidence = self._detect_intent(content)
-        
+
         # 情感分析
         sentiment = self._analyze_sentiment(content)
-        
+
         # 紧急程度分析
         urgency_level = self._analyze_urgency(content)
-        
+
         # 实体提取
         entities = self._extract_entities(content)
-        
+
         # 建议行动
         suggested_actions = self._suggest_actions(intent, sentiment, urgency_level)
-        
+
         return IntentAnalysis(
             intent=intent,
             confidence=confidence,
@@ -145,106 +278,112 @@ class IntentRecognizer:
             urgency_level=urgency_level,
             suggested_actions=suggested_actions
         )
-    
+
     def _detect_intent(self, content: str) -> tuple[CustomerIntent, float]:
         """检测意图"""
         max_matches = 0
         detected_intent = CustomerIntent.GENERAL
-        
+
         for intent, patterns in self.intent_patterns.items():
             matches = sum(1 for pattern in patterns if re.search(pattern, content))
             if matches > max_matches:
                 max_matches = matches
                 detected_intent = intent
-        
+
         confidence = min(max_matches / 2, 1.0)  # 简化置信度计算
         return detected_intent, confidence
-    
+
     def _analyze_sentiment(self, content: str) -> str:
         """分析情感"""
         positive_count = sum(1 for word in self.sentiment_keywords["positive"] if word in content)
         negative_count = sum(1 for word in self.sentiment_keywords["negative"] if word in content)
-        
+
         if negative_count > positive_count:
             return "negative"
         elif positive_count > negative_count:
             return "positive"
         else:
             return "neutral"
-    
+
     def _analyze_urgency(self, content: str) -> str:
         """分析紧急程度"""
         urgent_count = sum(1 for word in self.sentiment_keywords["urgent"] if word in content)
-        
+
         if urgent_count >= 2:
             return "high"
         elif urgent_count == 1:
             return "medium"
         else:
             return "low"
-    
+
     def _extract_entities(self, content: str) -> Dict[str, Any]:
         """提取实体"""
         entities = {}
-        
+
         # 提取订单号
         order_pattern = r"订单[号]?[：:]?\s*(\w+)"
         order_match = re.search(order_pattern, content)
         if order_match:
             entities["order_number"] = order_match.group(1)
-        
+
         # 提取产品名称
         product_pattern = r"产品[：:]?\s*(\w+)"
         product_match = re.search(product_pattern, content)
         if product_match:
             entities["product_name"] = product_match.group(1)
-        
+
         # 提取金额
         amount_pattern = r"(\d+(?:\.\d+)?)元"
         amount_match = re.search(amount_pattern, content)
         if amount_match:
             entities["amount"] = float(amount_match.group(1))
-        
+
         return entities
-    
+
     def _suggest_actions(self, intent: CustomerIntent, sentiment: str, urgency: str) -> List[str]:
         """建议行动"""
         actions = []
-        
+
         if intent == CustomerIntent.COMPLAINT:
             actions.append("安抚客户情绪")
             actions.append("收集问题详细信息")
             if urgency == "high":
                 actions.append("优先处理")
-        
+
         elif intent == CustomerIntent.SUPPORT:
             actions.append("提供技术支持")
             actions.append("收集故障信息")
-        
+
         elif intent == CustomerIntent.ORDER:
             actions.append("查询订单状态")
             actions.append("提供物流信息")
-        
+
         elif intent == CustomerIntent.PAYMENT:
             actions.append("检查支付状态")
             actions.append("提供支付解决方案")
-        
+
         elif intent == CustomerIntent.REFUND:
             actions.append("检查退款政策")
             actions.append("处理退款申请")
-        
+
         # 基于情感的额外行动
         if sentiment == "negative":
             actions.append("加强客户关怀")
-        
+
         return actions
 
 
 class CustomerServiceWorkflow:
     """客服工作流管理器 (LangGraph 应用)"""
-    
-    def __init__(self):
-        self.intent_recognizer = IntentRecognizer()
+
+    def __init__(self, use_llm_intent: bool = True):
+        """
+        初始化客服工作流
+
+        Args:
+            use_llm_intent: 是否使用 LLM 进行意图识别
+        """
+        self.intent_recognizer = IntentRecognizer(use_llm=use_llm_intent)
         self.conversations: Dict[str, ConversationContext] = {}
     
     def start_conversation(self, customer_id: str, initial_message: CustomerMessage) -> ConversationContext:
@@ -592,9 +731,15 @@ class LangSmithMonitor:
 
 class IntegratedCustomerService:
     """集成智能客服系统"""
-    
-    def __init__(self):
-        self.workflow = CustomerServiceWorkflow()
+
+    def __init__(self, use_llm_intent: bool = True):
+        """
+        初始化集成客服系统
+
+        Args:
+            use_llm_intent: 是否使用 LLM 进行意图识别
+        """
+        self.workflow = CustomerServiceWorkflow(use_llm_intent=use_llm_intent)
         self.monitor = LangSmithMonitor()
     
     def process_customer_message(self, customer_id: str, message_content: str, channel: str = "web") -> Dict[str, Any]:
@@ -664,11 +809,11 @@ class IntegratedCustomerService:
 def demo_integrated_customer_service():
     """演示集成智能客服系统"""
     print("=" * 60)
-    print("智能客服系统集成演示")
+    print("智能客服系统集成演示 (使用 LLM 意图识别)")
     print("=" * 60)
-    
-    # 创建集成系统
-    service = IntegratedCustomerService()
+
+    # 创建集成系统（使用 LLM 进行意图识别）
+    service = IntegratedCustomerService(use_llm_intent=True)
     
     # 模拟客户对话
     test_cases = [

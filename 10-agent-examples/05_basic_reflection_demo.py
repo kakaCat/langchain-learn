@@ -26,6 +26,8 @@ def load_environment():
     print(f"✅ 已加载配置文件: {env_path}")
     print(f"   BASE_URL: {os.getenv('OPENAI_BASE_URL')}")
     print(f"   MODEL: {os.getenv('OPENAI_MODEL')}\n")
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
+
 
 # 获取配置的语言模型
 def get_llm() -> ChatOpenAI:

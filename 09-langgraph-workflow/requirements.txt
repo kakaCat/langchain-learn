@@ -14,6 +14,10 @@ langchain-ollama>=1.0.1
 # 社区集成
 langchain-community>=0.4.1
 
+# Checkpoint 支持
+langgraph-checkpoint>=2.0.0
+langgraph-checkpoint-sqlite>=2.0.0
+
 # 常用辅助
 tiktoken>=0.12.0
 python-dotenv>=1.2.1
